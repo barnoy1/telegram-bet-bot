@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from bot.group_manager import GroupManager
 from settlement.calculator import SettlementCalculator
-from settlement.copilot_agent import CopilotSettlementAgent
+from settlement.ollama_agent import OllamaSettlementAgent
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,9 @@ BETTING, RESULTS, SETTLE = range(3)
 class BettingHandler:
     """Handles Telegram commands for betting bot."""
 
-    def __init__(self, group_manager: GroupManager, copilot_agent: Optional[CopilotSettlementAgent] = None):
+    def __init__(self, group_manager: GroupManager, ollama_agent: Optional[OllamaSettlementAgent] = None):
         self.group_manager = group_manager
-        self.copilot_agent = copilot_agent
+        self.ollama_agent = ollama_agent
         self.group_states = {}  # Track conversation state per group
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -147,13 +147,13 @@ class BettingHandler:
 
         participants = summary["participants"]
 
-        # Try Copilot first, fallback to deterministic
+        # Try Ollama first, fallback to deterministic
         transactions = None
-        if self.copilot_agent and self.copilot_agent._initialized:
+        if self.ollama_agent and self.ollama_agent._initialized:
             try:
-                transactions = await self.copilot_agent.calculate_settlement(participants)
+                transactions = await self.ollama_agent.calculate_settlement(participants)
             except Exception as e:
-                logger.warning(f"Copilot settlement failed: {e}")
+                logger.warning(f"Ollama settlement failed: {e}")
 
         # Fallback to deterministic calculator
         if transactions is None:

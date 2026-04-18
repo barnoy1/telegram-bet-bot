@@ -1,85 +1,96 @@
-"""Copilot SDK integration for settlement reasoning."""
+"""Ollama LLM integration for settlement reasoning."""
 
 import asyncio
 import json
 import logging
+import httpx
 from decimal import Decimal
 from typing import List, Tuple, Optional, Dict
 from db.storage import Participant
+from config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
 
-class CopilotSettlementAgent:
+class OllamaSettlementAgent:
     """
-    Wrapper around Copilot SDK for settlement logic.
-    Falls back to deterministic calculator if Copilot unavailable.
+    Uses Ollama (local LLM) for settlement reasoning.
+    Fallback to deterministic calculator if Ollama unavailable.
     """
 
-    def __init__(self, cli_path: str = "copilot", timeout: int = 30):
-        self.cli_path = cli_path
+    def __init__(self, base_url: str = OLLAMA_BASE_URL, model: str = OLLAMA_MODEL, timeout: int = OLLAMA_TIMEOUT_SECONDS):
+        self.base_url = base_url
+        self.model = model
         self.timeout = timeout
-        self.client = None
         self._initialized = False
 
     async def initialize(self) -> bool:
-        """Initialize Copilot client. Returns False if unavailable."""
+        """Check if Ollama is available."""
         try:
-            # Attempt lazy import of copilot SDK
-            from copilot import CopilotClient
-
-            self.client = CopilotClient()
-            self._initialized = True
-            logger.info("Copilot client initialized successfully")
-            return True
-        except ImportError:
-            logger.warning("Copilot SDK not available; using deterministic fallback")
-            return False
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                if response.status_code == 200:
+                    models = response.json().get("models", [])
+                    model_names = [m.get("name") for m in models]
+                    if self.model in model_names or any(self.model in m for m in model_names):
+                        self._initialized = True
+                        logger.info(f"Ollama initialized with model: {self.model}")
+                        return True
+                    else:
+                        logger.warning(f"Model {self.model} not found in Ollama. Available: {model_names}")
+                        return False
         except Exception as e:
-            logger.warning(f"Copilot initialization failed: {e}; using fallback")
+            logger.warning(f"Ollama not available: {e}")
             return False
 
     async def calculate_settlement(
         self, participants: List[Participant]
     ) -> Optional[List[Tuple[int, str, int, str, Decimal]]]:
         """
-        Use Copilot agent to reason about settlement.
+        Use Ollama to reason about settlement.
 
         Args:
             participants: List of Participant objects with bets and prizes
 
         Returns:
-            List of settlement transactions, or None if Copilot fails
+            List of settlement transactions, or None if Ollama fails
         """
-        if not self._initialized or self.client is None:
+        if not self._initialized:
             return None
 
         try:
-            # Prepare prompt for Copilot agent
+            # Prepare prompt for Ollama
             bets_dict = {p.user_id: float(p.bet_amount) for p in participants}
             winners_dict = {p.user_id: float(p.prize_amount) for p in participants if p.is_winner}
             usernames = {p.user_id: p.username for p in participants}
 
             prompt = self._build_settlement_prompt(bets_dict, winners_dict, usernames)
 
-            # Create session and send prompt
-            session = await asyncio.wait_for(
-                self.client.create_session(), timeout=self.timeout
-            )
-            reply = await asyncio.wait_for(
-                session.send_and_wait({"prompt": prompt}), timeout=self.timeout
-            )
+            # Call Ollama API
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": self.model, "prompt": prompt, "stream": False},
+                )
 
-            # Parse Copilot response
-            transactions = self._parse_settlement_response(reply, usernames)
-            logger.info(f"Copilot generated {len(transactions)} settlement transactions")
+                if response.status_code != 200:
+                    logger.warning(f"Ollama returned {response.status_code}")
+                    return None
+
+                result = response.json()
+                response_text = result.get("response", "")
+
+            # Parse Ollama response
+            transactions = self._parse_settlement_response(response_text, usernames)
+            if transactions is not None:
+                logger.info(f"Ollama generated {len(transactions)} settlement transactions")
             return transactions
 
         except asyncio.TimeoutError:
-            logger.warning(f"Copilot timeout after {self.timeout}s")
+            logger.warning(f"Ollama timeout after {self.timeout}s")
             return None
         except Exception as e:
-            logger.warning(f"Copilot settlement failed: {e}")
+            logger.warning(f"Ollama settlement failed: {e}")
             return None
 
     def _build_settlement_prompt(
@@ -88,12 +99,12 @@ class CopilotSettlementAgent:
         """Build a structured prompt for settlement reasoning."""
         participants_str = "\n".join(
             f"- User {uid} ({usernames[uid]}): bet ${bets[uid]:.2f}"
-            for uid in bets.keys()
+            for uid in sorted(bets.keys())
         )
 
         winners_str = "\n".join(
             f"- User {uid} ({usernames[uid]}): won ${winners[uid]:.2f}"
-            for uid in winners.keys()
+            for uid in sorted(winners.keys())
         ) if winners else "None"
 
         return f"""You are a settlement calculator for a betting group.
@@ -106,7 +117,7 @@ Winners and their prizes:
 
 Your task:
 1. Calculate each participant's net position (prize - bet)
-2. Identify debtors (negative) and creditors (positive)
+2. Identify debtors (negative balance) and creditors (positive balance)
 3. Generate minimal settlement transactions (debtor pays creditor)
 4. Output ONLY a JSON array with no markdown, no explanation.
 
@@ -128,8 +139,8 @@ Output ONLY the JSON, nothing else."""
 
     def _parse_settlement_response(
         self, response: str, usernames: Dict[int, str]
-    ) -> List[Tuple[int, str, int, str, Decimal]]:
-        """Parse JSON response from Copilot."""
+    ) -> Optional[List[Tuple[int, str, int, str, Decimal]]]:
+        """Parse JSON response from Ollama."""
         try:
             # Extract JSON from response (may be wrapped in markdown)
             if "```json" in response:
@@ -155,5 +166,6 @@ Output ONLY the JSON, nothing else."""
 
             return transactions
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.error(f"Failed to parse Copilot response: {e}")
+            logger.error(f"Failed to parse Ollama response: {e}")
+            logger.debug(f"Response was: {response}")
             return None

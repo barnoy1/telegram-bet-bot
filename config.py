@@ -11,9 +11,10 @@ PROJECT_ROOT = Path(__file__).parent
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-# Copilot Configuration
-COPILOT_CLI_PATH = os.getenv("COPILOT_CLI_PATH", "copilot")
-COPILOT_AUTH_TOKEN = os.getenv("COPILOT_AUTH_TOKEN", "")
+# Ollama Configuration (Local LLM for settlement reasoning)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma:7b")
+OLLAMA_TIMEOUT_SECONDS = 60
 
 # Database Configuration
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(PROJECT_ROOT / "betting_bot.db"))

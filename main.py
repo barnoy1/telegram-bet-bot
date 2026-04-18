@@ -7,11 +7,11 @@ from pathlib import Path
 
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from config import TELEGRAM_BOT_TOKEN, DATABASE_PATH, COPILOT_CLI_PATH, LOG_LEVEL
+from config import TELEGRAM_BOT_TOKEN, DATABASE_PATH, OLLAMA_BASE_URL, OLLAMA_MODEL
 from bot.group_manager import GroupManager
 from bot.telegram_handler import BettingHandler, BETTING, RESULTS, SETTLE
 from db.storage import BettingStorage
-from settlement.copilot_agent import CopilotSettlementAgent
+from settlement.ollama_agent import OllamaSettlementAgent
 
 # Configure logging
 logging.basicConfig(
@@ -29,13 +29,13 @@ async def main():
     storage = BettingStorage(DATABASE_PATH)
     group_manager = GroupManager(storage)
 
-    # Initialize Copilot agent (non-blocking if unavailable)
-    copilot_agent = CopilotSettlementAgent(cli_path=COPILOT_CLI_PATH)
-    copilot_available = await copilot_agent.initialize()
-    logger.info(f"Copilot agent available: {copilot_available}")
+    # Initialize Ollama agent (non-blocking if unavailable)
+    ollama_agent = OllamaSettlementAgent(base_url=OLLAMA_BASE_URL, model=OLLAMA_MODEL)
+    ollama_available = await ollama_agent.initialize()
+    logger.info(f"Ollama agent available: {ollama_available}")
 
     # Initialize handlers
-    betting_handler = BettingHandler(group_manager, copilot_agent if copilot_available else None)
+    betting_handler = BettingHandler(group_manager, ollama_agent if ollama_available else None)
 
     # Create application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()

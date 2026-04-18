@@ -1,5 +1,5 @@
 python-telegram-bot[all]==21.8
-copilot>=0.0.1
+ollama==0.1.32
 python-dotenv==1.0.0
 pytest==7.4.4
 pytest-asyncio==0.23.2
