@@ -1,5 +1,6 @@
 python-telegram-bot[all]==21.8
 ollama==0.1.32
+httpx==0.25.2
 python-dotenv==1.0.0
 pytest==7.4.4
 pytest-asyncio==0.23.2
