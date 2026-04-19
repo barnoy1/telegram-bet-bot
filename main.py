@@ -5,9 +5,9 @@ import logging
 import sys
 from pathlib import Path
 
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-from config import TELEGRAM_BOT_TOKEN, DATABASE_PATH, OLLAMA_BASE_URL, OLLAMA_MODEL
+from config import TELEGRAM_BOT_TOKEN, DATABASE_PATH, OLLAMA_BASE_URL, OLLAMA_MODEL, LOG_LEVEL
 from bot.group_manager import GroupManager
 from bot.telegram_handler import BettingHandler, BETTING, RESULTS, SETTLE
 from db.storage import BettingStorage
@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
+def main():
     """Start the Telegram bot."""
     logger.info("Starting Betting Bot...")
 
@@ -31,7 +31,7 @@ async def main():
 
     # Initialize Ollama agent (non-blocking if unavailable)
     ollama_agent = OllamaSettlementAgent(base_url=OLLAMA_BASE_URL, model=OLLAMA_MODEL)
-    ollama_available = await ollama_agent.initialize()
+    ollama_available = asyncio.run(ollama_agent.initialize())
     logger.info(f"Ollama agent available: {ollama_available}")
 
     # Initialize handlers
@@ -41,21 +41,29 @@ async def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Register command handlers
-    application.add_handler(CommandHandler("start", betting_handler.start))
-    application.add_handler(CommandHandler("bet", betting_handler.bet))
-    application.add_handler(CommandHandler("close", betting_handler.close))
-    application.add_handler(CommandHandler("winner", betting_handler.winner))
-    application.add_handler(CommandHandler("settle", betting_handler.settle))
-    application.add_handler(CommandHandler("status", betting_handler.status))
-    application.add_handler(CommandHandler("transactions", betting_handler.transactions))
+    application.add_handler(CommandHandler("str", betting_handler.start))
+    application.add_handler(CommandHandler("h", betting_handler.help))
+    application.add_handler(CommandHandler("b", betting_handler.bet))
+    application.add_handler(CommandHandler("w", betting_handler.winner))
+    application.add_handler(CommandHandler("s", betting_handler.settle))
+    application.add_handler(CommandHandler("sts", betting_handler.status))
+    application.add_handler(CommandHandler("t", betting_handler.transactions))
+    application.add_handler(CommandHandler("u", betting_handler.undo))
+    application.add_handler(CommandHandler("r", betting_handler.reset))
+
+    # Register message handlers
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^\d+(\.\d+)?$'), betting_handler.handle_numeric_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, betting_handler.new_chat_members))
 
     # Start bot
     logger.info("Bot is running. Press Ctrl+C to stop.")
     try:
-        await application.run_polling()
+        # Create new event loop for the bot
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        application.run_polling()
     except KeyboardInterrupt:
         logger.info("Bot stopped by user.")
-        await application.stop()
 
 
 def validate_config():
@@ -71,7 +79,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        asyncio.run(main())
+        main()
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         sys.exit(1)

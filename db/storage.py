@@ -19,6 +19,7 @@ class Participant:
     bet_amount: Decimal
     is_winner: bool = False
     prize_amount: Decimal = Decimal("0")
+    status: str = "in"
 
 
 @dataclass
@@ -67,6 +68,7 @@ class BettingStorage:
                     bet_amount REAL NOT NULL CHECK(bet_amount >= 0),
                     is_winner INTEGER DEFAULT 0,
                     prize_amount REAL DEFAULT 0,
+                    status TEXT DEFAULT 'in' CHECK(status IN ('in', 'out')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (group_id) REFERENCES groups(group_id),
                     UNIQUE(group_id, user_id)
@@ -119,15 +121,17 @@ class BettingStorage:
         return None
 
     def add_participant(self, group_id: int, user_id: int, username: str, bet_amount: Decimal) -> bool:
-        """Add or update a participant in a group."""
+        """Add or update a participant in a group. If user exists and is 'out', reset to 'in'."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO participants (group_id, user_id, username, bet_amount)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(group_id, user_id) DO UPDATE SET bet_amount = bet_amount + ?
+                    INSERT INTO participants (group_id, user_id, username, bet_amount, status)
+                    VALUES (?, ?, ?, ?, 'in')
+                    ON CONFLICT(group_id, user_id) DO UPDATE SET
+                        bet_amount = bet_amount + ?,
+                        status = 'in'
                     """,
                     (group_id, user_id, username, float(bet_amount), float(bet_amount)),
                 )
@@ -143,18 +147,18 @@ class BettingStorage:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT user_id, username, bet_amount, is_winner, prize_amount
+                SELECT user_id, username, bet_amount, is_winner, prize_amount, status
                 FROM participants WHERE group_id = ? ORDER BY user_id
                 """,
                 (group_id,),
             )
             return [
-                Participant(int(row[0]), row[1], Decimal(str(row[2])), bool(row[3]), Decimal(str(row[4])))
+                Participant(int(row[0]), row[1], Decimal(str(row[2])), bool(row[3]), Decimal(str(row[4])), row[5])
                 for row in cursor.fetchall()
             ]
 
     def set_winners(self, group_id: int, winners: Dict[int, Decimal]) -> bool:
-        """Mark winners and set prize amounts."""
+        """Mark winners, set prize amounts, and mark user as 'out'."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -162,7 +166,7 @@ class BettingStorage:
                     cursor.execute(
                         """
                         UPDATE participants
-                        SET is_winner = 1, prize_amount = ?
+                        SET is_winner = 1, prize_amount = ?, status = 'out'
                         WHERE group_id = ? AND user_id = ?
                         """,
                         (float(prize_amount), group_id, user_id),
@@ -218,3 +222,38 @@ class BettingStorage:
                 }
                 for row in cursor.fetchall()
             ]
+
+    def delete_last_participant(self, group_id: int) -> bool:
+        """Delete the last participant (most recent bet) in a group."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    DELETE FROM participants
+                    WHERE id = (
+                        SELECT id FROM participants
+                        WHERE group_id = ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                    )
+                    """,
+                    (group_id,),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error deleting last participant: {e}")
+            return False
+
+    def delete_all_participants(self, group_id: int) -> bool:
+        """Delete all participants in a group."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM participants WHERE group_id = ?", (group_id,))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Error deleting all participants: {e}")
+            return False

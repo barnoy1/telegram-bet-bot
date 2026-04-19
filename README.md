@@ -1,11 +1,13 @@
-# Telegram Betting Bot with Ollama LLM
+# Telegram Cash Game Bot with Ollama LLM
 
-A group betting bot for Telegram that calculates fair settlement of bets between participants using Ollama (local LLM) agent reasoning (with deterministic fallback).
+A cash game betting bot for Telegram (like poker cash games) that calculates fair settlement of bets between participants using Ollama (local LLM) agent reasoning (with deterministic fallback).
 
 ## Features
 
-- **Group Betting**: Create betting groups in Telegram and track participant bets
-- **Winner Declaration**: Admin declares winners and prize distributions
+- **Cash Game Model**: Users can join/leave at any time, like poker cash games
+- **Dynamic Betting**: No fixed betting phases - betting is always open
+- **Partial Settlements**: Users can declare winnings and leave while others continue playing
+- **Rejoin Support**: Users can rejoin after leaving with new bets
 - **Local LLM Settlement**: Uses Ollama (Gemma/Llama) to reason about fair settlement, with fallback to deterministic algorithm
 - **Transaction Generation**: Produces minimal settlement transactions (no circular payments)
 - **Persistent Storage**: SQLite database stores groups, bets, winners, and transactions
@@ -19,6 +21,21 @@ Telegram Bot ──► Group Manager ──► Settlement Logic ──► Ollama
                      (state)            (deterministic)    (agent reasoning)
                   (SQLite)           (fallback)
 ```
+
+### Multi-Group Support
+
+The bot is designed to work in multiple independent Telegram groups simultaneously. Each group operates as its own "room" with isolated state:
+
+- **One Brain, Many Rooms**: The bot instance serves multiple groups, each with its own memory
+- **Per-Group State**: Each group is identified by its Telegram `group_id` and has independent bets, winners, and settlements
+- **No Shared State**: Groups don't interfere with each other - all data is isolated by `group_id` in SQLite
+- **Automatic Scaling**: Telegram handles message routing, so no special infrastructure is needed for multi-group support
+
+**How it works:**
+1. Add the bot to any Telegram group
+2. Type `/start` to initialize the group
+3. Each group maintains its own betting state independently
+4. The bot can be in unlimited groups simultaneously
 
 ### Core Components
 
@@ -66,27 +83,32 @@ Telegram Bot ──► Group Manager ──► Settlement Logic ──► Ollama
 
 ### Bot Commands
 
-- **`/start`** - Initialize bot in a group
-- **`/bet <amount>`** - Place a bet (e.g., `/bet 50`)
-- **`/close`** - Close the betting phase
-- **`/winner <user_id> <prize>`** - Declare a winner (e.g., `/winner 123456789 150`)
-- **`/settle`** - Calculate settlements (uses Ollama or fallback)
-- **`/status`** - Show current group status
-- **`/transactions`** - Show settlement transactions
+- **`str`** - Initialize bot in a group
+- **`h`** - Show all available commands
+- **`b <amount>`** - Place a bet (e.g., `b 50`) - or just send a number like `50`
+- **`w <username> <prize>`** - Record winnings when user leaves (e.g., `w ron 150`)
+- **`s`** - Calculate settlements (can be done anytime)
+- **`sts`** - Show current group status with in/out tracking
+- **`t`** - Show settlement transactions
+- **`u`** - Remove the last bet placed
+- **`r`** - Reset all bets (empty the pot)
+
+**Quick Betting**: Simply send a number (e.g., `50` or `100`) to place a bet. The bot automatically uses your Telegram display name (first name + last name, or username if set).
 
 ### Example Workflow
 
 ```
-1. Group chat initialized: /start
-2. User 1: /bet 50
-3. User 2: /bet 100
-4. User 3: /bet 50
-5. Admin: /close (betting ends)
-6. Admin: /winner 2 150 (User 2 wins $150)
-7. Admin: /settle
+1. Group chat initialized: str
+2. User 1: 50 (just send the number)
+3. User 2: 100
+4. User 3: 50
+5. User 2 leaves: w user2 150 (User 2 wins $150 and leaves)
+6. User 1 adds more: 50 (can add money anytime)
+7. User 3 leaves: w user3 75 (User 3 wins $75 and leaves)
+8. Calculate: s
    ✅ Output: Settlement transactions
       - User 1 → User 2: $50.00
-      - User 3 breaks even
+      - User 1 → User 3: $25.00
 ```
 
 ## Settlement Algorithm

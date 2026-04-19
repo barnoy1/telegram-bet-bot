@@ -7,11 +7,11 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ${HOME}/.ollama:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/11434'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma:7b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:latest}
       - DATABASE_PATH=/app/data/betting_bot.db
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
@@ -40,9 +40,6 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
-
-volumes:
-  ollama_data:
 
 networks:
   betting-network:

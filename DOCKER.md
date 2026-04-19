@@ -7,16 +7,24 @@ This app can be run in Docker with Docker Compose, which includes both the Teleg
 ### Prerequisites
 - Docker and Docker Compose installed
 - Telegram Bot Token (from @BotFather)
+- Ollama models downloaded on host (run `ollama pull gemma4:latest`)
 
 ### Setup
 
-1. **Configure environment:**
+1. **Download Ollama model on host:**
+   ```bash
+   ollama pull gemma4:latest
+   # Verify model is available
+   ollama list
+   ```
+
+2. **Configure environment:**
    ```bash
    cp .env.example .env
    # Edit .env with your TELEGRAM_BOT_TOKEN
    ```
 
-2. **Start services:**
+3. **Start services:**
    ```bash
    docker-compose up -d
    ```
@@ -24,17 +32,17 @@ This app can be run in Docker with Docker Compose, which includes both the Teleg
    This will:
    - Pull Ollama image
    - Build bot image
-   - Start Ollama service (http://localhost:11434)
+   - Start Ollama service with bind mount to host's ollama models (${HOME}/.ollama)
    - Start bot service (connected to Ollama)
    - Create persistent data volume for databases
 
-3. **Check status:**
+4. **Check status:**
    ```bash
    docker-compose logs -f bot
    docker-compose logs ollama
    ```
 
-4. **Stop services:**
+5. **Stop services:**
    ```bash
    docker-compose down
    ```
@@ -47,22 +55,39 @@ Set in `.env` before running `docker-compose up`:
 
 ```bash
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-OLLAMA_MODEL=gemma:7b          # or llama2:7b, mistral:7b
+OLLAMA_MODEL=gemma4:latest       # Default model
+OLLAMA_BASE_URL=http://localhost:11434
 LOG_LEVEL=INFO                  # DEBUG for verbose output
 ```
 
-### Ollama Model Selection
+### Ollama Model Setup
 
-The first time Ollama runs, it will download the model. This may take a few minutes.
+The bot uses a bind mount to access your host's Ollama models at `${HOME}/.ollama`. This means:
 
-**Recommended models:**
-- `gemma:7b` (default, fast, good reasoning) - ~4GB
-- `llama2:7b` (powerful, slower) - ~4GB
-- `mistral:7b` (fast, good reasoning) - ~5GB
+- **Models must be downloaded on the host** before starting Docker
+- The container doesn't download models automatically
+- Models persist on your host machine
 
-To use a different model:
+**Download a model:**
 ```bash
-OLLAMA_MODEL=llama2:7b docker-compose up
+ollama pull gemma4:latest
+```
+
+**List available models:**
+```bash
+ollama list
+```
+
+**Use a different model:**
+```bash
+# 1. Download the model on host
+ollama pull llama2:7b
+
+# 2. Update .env
+echo "OLLAMA_MODEL=llama2:7b" >> .env
+
+# 3. Restart bot
+docker-compose up -d --force-recreate bot
 ```
 
 ### Persist Data
@@ -76,12 +101,28 @@ Database files are stored in `./data/` directory on host machine, so they surviv
 docker-compose logs ollama
 # Check if port 11434 is in use
 lsof -i :11434
+# Kill any existing ollama process
+kill $(lsof -t -i:11434)
+```
+
+### Model not found in Ollama
+```bash
+# Check available models on host
+ollama list
+
+# If model not found, download it
+ollama pull gemma4:latest
+
+# Restart services
+docker-compose restart bot
 ```
 
 ### Bot can't connect to Ollama
 ```bash
 # Verify Ollama is healthy
-docker-compose exec ollama curl http://localhost:11434/api/tags
+docker-compose exec ollama bash -c 'echo > /dev/tcp/localhost/11434'
+# Check if models are accessible
+docker-compose exec ollama ollama list
 ```
 
 ### Out of memory
@@ -111,6 +152,7 @@ docker build -t betting-bot:latest .
 docker run -it \
   -e TELEGRAM_BOT_TOKEN=your_token \
   -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  -e OLLAMA_MODEL=gemma4:latest \
   -v $(pwd)/data:/app/data \
   betting-bot:latest
 ```
@@ -120,18 +162,21 @@ docker run -it \
 # Network for communication
 docker network create betting-net
 
-# Start Ollama
+# Start Ollama with host models bind mount
 docker run -d \
   --name ollama \
   --network betting-net \
   -p 11434:11434 \
+  -v ${HOME}/.ollama:/root/.ollama \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
   ollama/ollama:latest
 
-# Start bot (pulls model ~2min first time)
+# Start bot
 docker run -it \
   --network betting-net \
   -e TELEGRAM_BOT_TOKEN=your_token \
   -e OLLAMA_BASE_URL=http://ollama:11434 \
+  -e OLLAMA_MODEL=gemma4:latest \
   -v $(pwd)/data:/app/data \
   betting-bot:latest
 ```
