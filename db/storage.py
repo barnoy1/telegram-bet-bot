@@ -17,9 +17,9 @@ class Participant:
     user_id: int
     username: str
     bet_amount: Decimal
-    is_winner: bool = False
     prize_amount: Decimal = Decimal("0")
     status: str = "in"
+    settlement_timestamp: Optional[str] = None
 
 
 @dataclass
@@ -29,6 +29,7 @@ class BettingGroup:
     group_name: str
     creator_id: int
     created_at: str
+    last_activity_timestamp: Optional[str] = None
 
 
 class BettingStorage:
@@ -52,10 +53,24 @@ class BettingStorage:
                     creator_id INTEGER NOT NULL,
                     status TEXT DEFAULT 'active' CHECK(status IN ('active', 'closed', 'settled')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    settled_at TIMESTAMP
+                    settled_at TIMESTAMP,
+                    last_activity_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            
+            # Add last_activity_timestamp column if it doesn't exist (migration)
+            cursor.execute("PRAGMA table_info(groups)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'last_activity_timestamp' not in columns:
+                cursor.execute(
+                    "ALTER TABLE groups ADD COLUMN last_activity_timestamp TIMESTAMP"
+                )
+                # Update existing rows with current timestamp
+                cursor.execute(
+                    "UPDATE groups SET last_activity_timestamp = CURRENT_TIMESTAMP WHERE last_activity_timestamp IS NULL"
+                )
+                logger.info("Added last_activity_timestamp column to groups table")
 
             # Participants table
             cursor.execute(
@@ -66,15 +81,33 @@ class BettingStorage:
                     user_id INTEGER NOT NULL,
                     username TEXT NOT NULL,
                     bet_amount REAL NOT NULL CHECK(bet_amount >= 0),
-                    is_winner INTEGER DEFAULT 0,
                     prize_amount REAL DEFAULT 0,
                     status TEXT DEFAULT 'in' CHECK(status IN ('in', 'out')),
+                    settlement_timestamp TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (group_id) REFERENCES groups(group_id),
                     UNIQUE(group_id, user_id)
                 )
                 """
             )
+            
+            # Add status column to participants table if it doesn't exist (migration)
+            cursor.execute("PRAGMA table_info(participants)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'status' not in columns:
+                cursor.execute(
+                    "ALTER TABLE participants ADD COLUMN status TEXT DEFAULT 'in'"
+                )
+                logger.info("Added status column to participants table")
+            
+            # Add settlement_timestamp column to participants table if it doesn't exist (migration)
+            cursor.execute("PRAGMA table_info(participants)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'settlement_timestamp' not in columns:
+                cursor.execute(
+                    "ALTER TABLE participants ADD COLUMN settlement_timestamp TIMESTAMP"
+                )
+                logger.info("Added settlement_timestamp column to participants table")
 
             # Transactions table (settlement results)
             cursor.execute(
@@ -112,13 +145,40 @@ class BettingStorage:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT group_id, group_name, creator_id, created_at FROM groups WHERE group_id = ?",
+                "SELECT group_id, group_name, creator_id, created_at, last_activity_timestamp FROM groups WHERE group_id = ?",
                 (group_id,),
             )
             row = cursor.fetchone()
             if row:
                 return BettingGroup(*row)
         return None
+
+    def get_all_groups(self) -> List[BettingGroup]:
+        """Retrieve all groups."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT group_id, group_name, creator_id, created_at, last_activity_timestamp FROM groups"
+            )
+            return [
+                BettingGroup(*row)
+                for row in cursor.fetchall()
+            ]
+
+    def update_group_activity(self, group_id: int, activity_time: datetime) -> bool:
+        """Update the last activity timestamp for a group."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE groups SET last_activity_timestamp = ? WHERE group_id = ?",
+                    (activity_time.isoformat(), group_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error updating group activity: {e}")
+            return False
 
     def add_participant(self, group_id: int, user_id: int, username: str, bet_amount: Decimal) -> bool:
         """Add or update a participant in a group. If user exists and is 'out', reset to 'in'."""
@@ -147,35 +207,47 @@ class BettingStorage:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT user_id, username, bet_amount, is_winner, prize_amount, status
+                SELECT user_id, username, bet_amount, prize_amount, status, settlement_timestamp
                 FROM participants WHERE group_id = ? ORDER BY user_id
                 """,
                 (group_id,),
             )
             return [
-                Participant(int(row[0]), row[1], Decimal(str(row[2])), bool(row[3]), Decimal(str(row[4])), row[5])
+                Participant(int(row[0]), row[1], Decimal(str(row[2])), Decimal(str(row[3])), row[4], row[5])
                 for row in cursor.fetchall()
             ]
 
-    def set_winners(self, group_id: int, winners: Dict[int, Decimal]) -> bool:
-        """Mark winners, set prize amounts, and mark user as 'out'."""
+    def set_user_out(self, group_id: int, user_id: int, prize_amount: Decimal) -> bool:
+        """Mark user as 'out' with prize amount and update settlement timestamp."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                for user_id, prize_amount in winners.items():
-                    cursor.execute(
-                        """
-                        UPDATE participants
-                        SET is_winner = 1, prize_amount = ?, status = 'out'
-                        WHERE group_id = ? AND user_id = ?
-                        """,
-                        (float(prize_amount), group_id, user_id),
-                    )
+                cursor.execute(
+                    """
+                    UPDATE participants
+                    SET prize_amount = ?, status = 'out', settlement_timestamp = CURRENT_TIMESTAMP
+                    WHERE group_id = ? AND user_id = ?
+                    """,
+                    (float(prize_amount), group_id, user_id),
+                )
                 conn.commit()
-            return True
+                return cursor.rowcount > 0
         except Exception as e:
-            logger.error(f"Error setting winners: {e}")
+            logger.error(f"Error setting user out: {e}")
             return False
+
+    def get_total_pot(self, group_id: int) -> Decimal:
+        """Get total pot for a group."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT SUM(bet_amount) FROM participants WHERE group_id = ? AND status = 'in'",
+                (group_id,),
+            )
+            result = cursor.fetchone()
+            if result and result[0]:
+                return Decimal(str(result[0]))
+            return Decimal("0")
 
     def save_transactions(self, group_id: int, transactions: List[Tuple[int, str, int, str, Decimal]]) -> bool:
         """Save settlement transactions."""

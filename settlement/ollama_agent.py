@@ -61,7 +61,7 @@ class OllamaSettlementAgent:
         try:
             # Prepare prompt for Ollama
             bets_dict = {p.user_id: float(p.bet_amount) for p in participants}
-            winners_dict = {p.user_id: float(p.prize_amount) for p in participants if p.is_winner}
+            winners_dict = {p.user_id: float(p.prize_amount) for p in participants if p.status == 'out'}
             usernames = {p.user_id: p.username for p in participants}
 
             prompt = self._build_settlement_prompt(bets_dict, winners_dict, usernames)

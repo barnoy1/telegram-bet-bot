@@ -15,28 +15,61 @@ Core logic: Given bets and winnings, compute a settlement matrix ensuring no cir
 ## Architecture Approach
 
 ```
-Telegram Bot ──→ Betting Group Manager ──→ Settlement Logic ──► Ollama (Local LLM)
-                     (state)            (deterministic)    (agent reasoning)
-                  (SQLite)           (fallback)
+Telegram Bot ──→ Message Handler ──► Service Layer ──► Storage
+                     (Numeric/Out)      (Business Logic)      (SQLite)
+                           │                  │
+                           │                  ▼
+                           │          Settlement Engine (Auto-trigger)
+                           │          (After each action)
+                           │                  │
+                           └──────────────────┘
+                              (Immediate feedback)
+                                   │
+                                   ▼
+                           Ollama (Local LLM)
+                           (deterministic fallback)
 ```
+
+### SOLID Principles Applied
+
+**Single Responsibility Principle (SRP):**
+- Each command handler has one responsibility (e.g., BetCommand, WinnerCommand)
+- Formatters separated from business logic (status_formatter, settlement_formatter)
+- Services focused on specific domains (GroupService, ParticipantService, etc.)
+
+**Open/Closed Principle (OCP):**
+- New commands can be added without modifying existing handlers
+- Command registry enables dynamic handler registration
+- Interfaces allow alternative implementations
+
+**Dependency Inversion Principle (DIP):**
+- Handlers depend on service interfaces, not concrete implementations
+- Factories handle dependency injection
+- Services depend on storage abstraction
 
 ### High-Level Design
 
 1. **Telegram Interface** (python-telegram-bot or similar)
    - `str` - Initialize bot in a group
    - `h` - Show all available commands
-   - `b <amount>` - Place a bet (or just send a number)
    - Numeric messages (e.g., `50`, `100`) - Automatically placed as bets using display name
-   - `w <username> <prize>` - Record winnings when user leaves (marks user as 'out')
+   - `out <amount>` - Leave game with specified amount (max = current pot)
    - `u` - Remove the last bet placed
    - `r` - Reset all bets (empty the pot)
-   - `s` - Trigger settlement calculation via Ollama (can be done anytime)
-   - `sts` - Show current group status with in/out tracking
    - `t` - Show settlement transactions
 
-2. **Betting Group Manager** (SQLite)
-   - Track active groups, participants, bets
-   - Track user status (in/out) for cash game model
+2. **Message Handlers** (Simplified pattern)
+   - Numeric message handler - Interprets numbers as bets
+   - Out command handler - Handles player exit with validation
+   - Settlement auto-triggered after each action
+   - Handlers delegate to service layer for business logic
+
+3. **Service Layer** (Business logic)
+   - BettingService - Coordinates betting operations
+   - GroupService - Group lifecycle management
+   - ParticipantService - Participant/bet management
+   - TransactionService - Transaction management
+   - SettlementService - Settlement calculation (auto-triggered)
    - **Multi-Group Support**: Each group operates independently with its own state
 
 ## Multi-Group Architecture
@@ -61,8 +94,9 @@ participants table:
 - user_id
 - username
 - bet_amount
-- is_winner
+- status ('in' or 'out')
 - prize_amount
+- settlement_timestamp (tracks when last settlement was calculated)
 ```
 
 ### Scaling Across Many Small Groups
@@ -107,8 +141,11 @@ project/
 ├── main.py                    # Telegram bot entry point
 ├── bot/
 │   ├── __init__.py
-│   ├── telegram_handler.py    # Command handlers (b, w, s, sts, t, u, r)
-│   └── group_manager.py       # Track groups, participants, bets
+│   ├── telegram_handler.py    # Message handlers (numeric, out, t, u, r)
+│   ├── commands/              # Individual command handlers
+│   ├── services/              # Business logic layer
+│   ├── formatters/            # Output formatting
+│   └── utils/                 # Utilities
 ├── settlement/
 │   ├── __init__.py
 │   ├── ollama_agent.py        # Ollama LLM client wrapper for settlement
@@ -129,8 +166,10 @@ project/
    - Setup Telegram bot registration and token handling
 
 2. **Telegram Bot Core**
-   - Build command handlers (str, b, w, s, sts, t, u, r)
-   - Implement group + participant state management with in/out tracking
+   - Build message handlers (str, h, out, t, u, r)
+   - Implement numeric message handler for automatic betting
+   - Implement out command with pot validation
+   - Implement auto-settlement trigger after each action
    - Handle async message flow
 
 3. **Ollama Integration**
@@ -139,14 +178,17 @@ project/
    - Implement fallback deterministic calculator (in case agent doesn't work)
 
 4. **Settlement Logic**
-   - Ollama agent analyzes: {bets: {user: amount}, winners: {user: prize}}
+   - Ollama agent analyzes: {bets: {user: amount}, out: {user: amount}}
    - Computes minimal settlement transactions (works with in/out status)
    - Returns formatted transaction table to Telegram
+   - Auto-triggered after each bet and out command
 
 5. **Testing & Polish**
    - Unit tests for settlement calculations
+   - Unit tests for pot validation logic
+   - Unit tests for rejoin logic
    - E2E test with Telegram sandbox
-   - Error handling and retry logic for Copilot calls
+   - Error handling and retry logic for Ollama calls
 
 ## Key Decisions
 
@@ -169,11 +211,13 @@ project/
 ## Success Criteria
 
 - [x] Users can join a group via Telegram and place bets
-- [x] Users can declare winnings and leave at any time
+- [x] Users can leave with "out <amount>" command (pot validated)
+- [x] Settlement is automatically calculated after each action
 - [x] Bot calls Ollama agent to compute settlement
 - [x] Settlement table shows all transactions needed
 - [x] No circular payments (A→B→C→A) in output
-- [x] Users can rejoin after leaving
+- [x] Users can rejoin after leaving with new bets
+- [x] Numeric messages automatically interpreted as bets
 - [x] Deployed and testable via Telegram
 
 ## Risks & Mitigations

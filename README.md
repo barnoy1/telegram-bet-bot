@@ -6,21 +6,50 @@ A cash game betting bot for Telegram (like poker cash games) that calculates fai
 
 - **Cash Game Model**: Users can join/leave at any time, like poker cash games
 - **Dynamic Betting**: No fixed betting phases - betting is always open
-- **Partial Settlements**: Users can declare winnings and leave while others continue playing
+- **Simplified Betting**: Just send a number to place a bet - no command prefix needed
+- **Easy Exit**: Users leave with "out <amount>" command (pot validated)
+- **Auto-Settlement**: Settlement calculated automatically after every action
 - **Rejoin Support**: Users can rejoin after leaving with new bets
 - **Local LLM Settlement**: Uses Ollama (Gemma/Llama) to reason about fair settlement, with fallback to deterministic algorithm
 - **Transaction Generation**: Produces minimal settlement transactions (no circular payments)
-- **Persistent Storage**: SQLite database stores groups, bets, winners, and transactions
+- **Persistent Storage**: SQLite database stores groups, bets, and transactions
 - **Async/Await**: Full async support for Telegram API and Ollama calls
 - **Zero External Dependencies**: Run fully locally without cloud APIs
 
 ## Architecture
 
 ```
-Telegram Bot ──► Group Manager ──► Settlement Logic ──► Ollama (Local LLM)
-                     (state)            (deterministic)    (agent reasoning)
-                  (SQLite)           (fallback)
+Telegram Bot ──► Message Handler ──► Service Layer ──► Storage
+                     (Numeric/Out)      (Business Logic)      (SQLite)
+                           │                  │
+                           │                  ▼
+                           │          Settlement Engine (Auto-trigger)
+                           │          (After each action)
+                           │                  │
+                           └──────────────────┘
+                              (Immediate feedback)
+                                   │
+                                   ▼
+                           Ollama (Local LLM)
+                           (deterministic fallback)
 ```
+
+### SOLID Principles Applied
+
+**Single Responsibility Principle (SRP):**
+- Each command handler has one responsibility (e.g., BetCommand, WinnerCommand)
+- Formatters separated from business logic (status_formatter, settlement_formatter)
+- Services focused on specific domains (GroupService, ParticipantService, etc.)
+
+**Open/Closed Principle (OCP):**
+- New commands can be added without modifying existing handlers
+- Command registry enables dynamic handler registration
+- Interfaces allow alternative implementations
+
+**Dependency Inversion Principle (DIP):**
+- Handlers depend on service interfaces, not concrete implementations
+- Factories handle dependency injection
+- Services depend on storage abstraction
 
 ### Multi-Group Support
 
@@ -39,8 +68,8 @@ The bot is designed to work in multiple independent Telegram groups simultaneous
 
 ### Core Components
 
-1. **Telegram Handler** (`bot/telegram_handler.py`): Processes `/bet`, `/settle`, `/winner` commands
-2. **Group Manager** (`bot/group_manager.py`): Tracks groups, participants, bets, winners
+1. **Telegram Handler** (`bot/telegram_handler.py`): Processes numeric messages, out command, and manages auto-settlement
+2. **Service Layer** (`bot/services/`): Business logic for groups, participants, transactions, and settlement
 3. **Settlement Calculator** (`settlement/calculator.py`): Deterministic settlement algorithm
 4. **Ollama Agent** (`settlement/ollama_agent.py`): Uses Ollama for local LLM-based reasoning
 5. **Storage** (`db/storage.py`): SQLite persistence
@@ -85,47 +114,51 @@ The bot is designed to work in multiple independent Telegram groups simultaneous
 
 - **`str`** - Initialize bot in a group
 - **`h`** - Show all available commands
-- **`b <amount>`** - Place a bet (e.g., `b 50`) - or just send a number like `50`
-- **`w <username> <prize>`** - Record winnings when user leaves (e.g., `w ron 150`)
-- **`s`** - Calculate settlements (can be done anytime)
-- **`sts`** - Show current group status with in/out tracking
+- **Numeric messages** (e.g., `50`, `100`) - Automatically place a bet using your display name
+- **`out <amount>`** - Leave game with specified amount (max = current pot)
 - **`t`** - Show settlement transactions
 - **`u`** - Remove the last bet placed
 - **`r`** - Reset all bets (empty the pot)
 
-**Quick Betting**: Simply send a number (e.g., `50` or `100`) to place a bet. The bot automatically uses your Telegram display name (first name + last name, or username if set).
+**Quick Betting**: Simply send a number (e.g., `50` or `100`) to place a bet. No command prefix needed. The bot automatically uses your Telegram display name (first name + last name, or username if set). Settlement is calculated automatically after each action.
 
 ### Example Workflow
 
 ```
 1. Group chat initialized: str
 2. User 1: 50 (just send the number)
+   ✅ Auto-settlement runs (User 1: -$50)
 3. User 2: 100
+   ✅ Auto-settlement runs (User 1: -$50, User 2: -$100)
 4. User 3: 50
-5. User 2 leaves: w user2 150 (User 2 wins $150 and leaves)
+   ✅ Auto-settlement runs (User 1: -$50, User 2: -$100, User 3: -$50)
+5. User 2 leaves: out 150 (User 2 takes $150 from pot)
+   ✅ Auto-settlement runs immediately
+      Output: User 1 → User 2: $50.00
+              User 3 → User 2: $50.00
 6. User 1 adds more: 50 (can add money anytime)
-7. User 3 leaves: w user3 75 (User 3 wins $75 and leaves)
-8. Calculate: s
-   ✅ Output: Settlement transactions
-      - User 1 → User 2: $50.00
-      - User 1 → User 3: $25.00
+   ✅ Auto-settlement runs
+7. User 3 leaves: out 75 (User 3 takes $75 from pot)
+   ✅ Auto-settlement runs immediately
+      Output: User 1 → User 3: $25.00
 ```
 
 ## Settlement Algorithm
 
+### Auto-Triggered Settlement
+
+Settlement is automatically calculated after every action (bet placement or "out" command). This ensures users always know the current state without manual intervention.
+
 ### Ollama LLM Agent
 
-The Ollama LLM receives a structured prompt with bets and winners, and reasons about fair settlement:
+The Ollama LLM receives a structured prompt with bets and exits, and reasons about fair settlement:
 
 **Input:**
 ```
 Participants:
-- User 1 (Alice): bet $50
-- User 2 (Bob): bet $100
-- User 3 (Carol): bet $50
-
-Winners:
-- User 2 (Bob): won $150
+- User 1 (Alice): bet $50, status: in
+- User 2 (Bob): bet $100, status: out, took $150
+- User 3 (Carol): bet $50, status: in
 ```
 
 **Agent Output (JSON):**
@@ -140,8 +173,8 @@ Winners:
 
 If Ollama is unavailable or timeout occurs, the bot uses a greedy settlement algorithm:
 
-1. Compute net positions: `balance = prize - bet`
-2. Separate debtors and creditors
+1. Compute net positions: `balance = (amount taken when out) - bet_amount`
+2. Separate debtors (negative balance) and creditors (positive balance)
 3. Match greedily: largest debtor pays largest creditor
 4. Result: minimal transactions, no circular payments
 
@@ -195,8 +228,8 @@ from db.storage import Participant
 from decimal import Decimal
 
 participants = [
-    Participant(1, "Alice", Decimal("50"), False, Decimal("0")),
-    Participant(2, "Bob", Decimal("100"), True, Decimal("150")),
+    Participant(1, "Alice", Decimal("50"), "in", Decimal("0")),
+    Participant(2, "Bob", Decimal("100"), "out", Decimal("150")),
 ]
 result = SettlementCalculator.calculate_settlement(participants)
 print(result)  # [(1, 'Alice', 2, 'Bob', Decimal('50'))]
