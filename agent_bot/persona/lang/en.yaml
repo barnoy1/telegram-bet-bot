@@ -1,0 +1,226 @@
+# English translations for Poker Bot - Persona: Sleazy 🃏
+meta:
+  language_code: "en"
+  language_name: "English"
+  direction: "ltr"
+  encoding: "utf-8"
+
+# UI Messages
+start:
+  header: "🎰 POKER BOT - SLEAZY'S TABLE"
+  initialized: "Bot Initialized. Let's keep it clean, boys."
+  description: "I'm here to track your bets and make sure the 'collection plate' stays full."
+  quick_start: "Quick Start:"
+  quick_start_text: "Just send a number to place a bet. I'll handle the math."
+  help_command: "Type `/h` for the house rules."
+
+help:
+  header: "HOUSE COMMANDS"
+  poker_commands: "Action Commands:"
+  str_desc: "Open a new table (bring your friends)"
+  out_desc: "Cash out with your winnings (or what's left)"
+  quick_bet: "Quick Bet:"
+  quick_bet_text: "Just send a number (e.g., `50`) to push some plastic"
+  info_commands: "Intel Commands:"
+  sts_desc: "Check the table status. Who's winning?"
+  l_desc: "Change bot language"
+  t_desc: "Settlement transactions - who owes who"
+  v_desc: "Bot version"
+  mgmt_commands: "Management:"
+  u_desc: "Undo last bet (if your hands were shaking)"
+  r_desc: "Reset everything. Fresh start."
+  h_desc: "Show this help menu"
+
+welcome:
+  header: "WELCOME TO THE BASEMENT"
+  joined: "The House is open! Poker Bot is in the building."
+  description: "I'll track your bets and calculate the damage at the end of the night."
+  to_get_started: "To get started:"
+  str_instruction: "Type `/str` to initialize the table"
+  need_help: "Confused?"
+  help_instruction: "Type `/h` anytime, Champ."
+
+status:
+  header: "📊 TABLE STATUS"
+  total_pot: "The Soup (Total Pot):"
+  players: "Active Marks:"
+  no_players: "Table's empty. What is this, a library?"
+
+errors:
+  event_not_initialized: "The table isn't open yet. Run `str` before you start throwing money."
+  event_closed: "The game is closed. Use `/str` to start a new shift."
+  amount_positive: "What kind of number is that? Give me a real amount, don't be a clown."
+  event_not_found: "No game found. Use `/str` to get the cards moving."
+  cannot_bet_state: "Can't place a bet in the {state} state."
+
+# Behavioral Playbook - Fresh Meat (New Player Joins)
+fresh_meat:
+  greetings:
+    - "New blood! Pull up a crate, kid. Try not to get any tears on the felt, I just had it vacuumed."
+    - "Whoa! Look at this philanthropist! Sit down, Big Shot—make yourself comfortable. I'll make sure the guys treat your chips with 'respect' before they take 'em."
+    - "Well, well, a new donor for the Sleazy Retirement Fund. Sit down, let's see what you're made of."
+    - "Fresh meat in the grinder! Grab a seat, don't mind the smell—it's just the scent of missed opportunities."
+    - "Look at that watch! Is it real or did you find it in a cereal box? Either way, your money's good here."
+    - "Welcome to the big leagues, Rookie. Try not to embarrass yourself in the first ten minutes."
+    - "A new player! Bring him a drink—he's going to need it once he sees how these sharks bite."
+  big_buyin: "Holy smokes! Look at the bankroll on this one. Sit down, Champ. I love a guy who isn't afraid to lose in style."
+
+# Behavioral Playbook - The Action (Placing a Bet)
+action:
+  standard_bet: 
+    - "Oh, he's feeling spicy! Pushing some plastic into the middle. You trying to buy a clue or just showing off?"
+    - "Interesting move. You chasing a dream or did you just get tired of having a full wallet?"
+    - "Putting some skin in the game, huh? I like the confidence, let's see if the cards agree."
+    - "There goes the lunch money. You sure about this, Einstein? The pot is getting hungry."
+    - "Pushing a little plastic? You trying to impress the table or is your finger just twitching?"
+    - "Nice bet, Genius. Let's see if your cards talk as loud as your chips do."
+    - "The soup is starting to look tasty. Keep it coming, I've got a boat payment due."
+  big_bet: 
+    - "There it is! The 'Hero Move.' You betting like you've got a printer in the basement, Champ. You sure your heart can take that much stress?"
+    - "Whoa, Big Spender! Somebody's looking to end the night early or you just hate having money?"
+    - "Look at you! Acting like we're in Vegas. This is a basement, pal. Keep your feet on the ground."
+    - "Dropped a bomb on the table! Let's see who's still standing when the dust settles."
+    - "That's an 'All-In' on your pride. Better hope you've got the goods to back it up."
+    - "Somebody's feeling real brave. Or real desperate. We'll find out soon enough, won't we?"
+    - "That's a lot of plastic for a guy in a knock-off suit. You feeling lucky tonight?"
+  hesitation: 
+    - "Tick-tock, Einstein. The ice in my drink is melting faster than your resolve. You in or you folding your pride again?"
+    - "Come on, kid. The table's waiting and my patience costs extra. Make a move."
+    - "You calculating the orbital velocity of the moon or just scared? Push the chips."
+    - "The silence is killing me. Do something or give up your seat to someone with a pulse."
+    - "Recalculating? This is poker, not GPS. Hit the gas or pull over."
+    - "Time is money, and you're wasting both. What's it gonna be?"
+    - "You waiting for a written invitation? Push the plastic or fold quietly."
+
+# Behavioral Playbook - The Rebuy
+rebuy:
+  enabler: 
+    - "That's the spirit! I knew you weren't a quitter. The second mortgage is always the luckiest, right?"
+    - "Back for more? I love the persistence. Most guys would've called it a night, but you? You've got 'vision.'"
+    - "Now that's what I call determination. Or insanity. I'm not sure yet, but the pot sure is happy."
+    - "Third time's a charm! Or in your case, the third time you've funded my vacation to the coast. Sit back down."
+    - "I like your style. This stack looks way luckier than the last one, I can feel it."
+    - "Don't stop now! You're right in the middle of a learning experience. Refill the plastic."
+    - "Here's our pro! I knew you'd be back. The table was feeling lonely without your contribution."
+  mockery: 
+    - "Another stack for the table! Thanks, I really needed to remodel the kitchen. Let's see if these chips are smarter than the last ones."
+    - "Don't you get tired of losing? Just kidding! Keep the money flowing, the house loves you."
+    - "Digging deeper into the pockets, huh? I love players with deep pockets and short memories."
+    - "Look at that persistence! If you worked this hard at your day job, you'd be the CEO by now."
+    - "Back in the ring? I admire your ability to ignore reality. Shuffle 'em up."
+    - "That money was burning a hole in your pocket anyway. I'll help you put out the fire."
+    - "You really think this batch is different? Well, I'm not here to judge, I'm here to rake."
+
+# Behavioral Playbook - Exit Interview
+exit:
+  winner_leaving: 
+    - "Leaving already? The sun isn't even up! Taking the family's money and running? Real classy, Einstein. Real classy."
+    - "Cashing out with the profit? Smart move. Too bad, I was just starting to like your money."
+    - "Going home? Don't forget to tell everyone how nice Sleazy was while he was counting your chips."
+    - "A hit-and-run! Stay classy, Champ. I'm sure the wheel will come back around for you tomorrow."
+    - "Where you going? The table's just getting warm! Go buy the wife something nice, maybe she'll let you come back."
+    - "Iron discipline, huh? I hate it, but I respect it. Now get outta here."
+    - "Taking the cream and heading out? Fine, Genius. Leave a tip for the rake on your way out."
+  loser_leaving: 
+    - "Tapped out, huh? Don't look at me—I'm just the guy with the rake. Don't worry, we'll name a chair after your contribution tonight."
+    - "What happened? The wife called? Or did you just run out of guts in the middle of the hand?"
+    - "Well, every party has an end. Try not to hit the door on the way out, your vision looks a bit blurry from the loss."
+    - "Table's gonna feel empty without you... and your wallet. Come back when you've got some meat on your bones."
+    - "Balloon popped? Don't worry, you can always sell a kidney and come back tomorrow. Just kidding... mostly."
+    - "Left with your pockets inside out? Don't worry, it's a warm night. Come back when you've got a fresh bankroll."
+    - "Tough break. This game is a cruel mistress. Go get some sleep and dream about a straight flush."
+
+# Exit Taunts - Positive Balance (Profit)
+exit_taunts:
+  positive:
+    fake_friendly:
+      - "Hey, hey! {username} walking away with ${balance:.2f} profit? Smart business, Champ! We're all friends here... some just richer friends!"
+      - "Breathe, {username}! You're up ${balance:.2f} and calling it a day? I respect the discipline, Genius. Really!"
+      - "Look at you, {username}! ${balance:.2f} in the black! That's what I call playing it safe. The house loves a predictable player!"
+      - "Well done, {username}! ${balance:.2f} in the pocket. That's how you build an empire, slowly and carefully."
+      - "{username}, you're killing it! Grabbed ${balance:.2f} and bolted. Love the cold-blooded move."
+      - "You did it, King. ${balance:.2f} profit is no joke. Go celebrate, you earned it."
+      - "I see someone knows when to cut and run. ${balance:.2f} is a great exit. See you in the winner's circle."
+    aggressive:
+      - "What is this, {username}? Grabbing ${balance:.2f} and running? Make a move before I start charging rent by the minute!"
+      - "{username} snatches ${balance:.2f} from the soup and bolts! Somebody make a REAL move or get out!"
+      - "Running with ${balance:.2f} profit, {username}? That's not poker, that's a hit-and-run! Where's the guts?"
+      - "Snatched ${balance:.2f} and flew? What's the matter, scared the luck will turn? Cowards don't build monuments."
+      - "{username}, you serious? With ${balance:.2f} you're closing shop? I thought you came to play."
+      - "Took the 'gravy' and ran. Nice one, Einstein. Don't forget to look over your shoulder."
+      - "What's this, {username}? Made ${balance:.2f} and suddenly you're in a hurry? Stay and give the guys a chance to get it back."
+    superstitious:
+      - "{username} leaving with ${balance:.2f}? You're sitting in the lucky chair, pal. Don't mess up the vibes by leaving early!"
+      - "Stop breathing so loudly, {username}! You're clogging up the luck with your ${balance:.2f} exit! The table's cursed now!"
+      - "{username} takes ${balance:.2f} and runs? Bad juju, pal. You broke the flow! The universe remembers!"
+      - "{username}, leaving with ${balance:.2f}? The table spirits don't like it when you leave in the middle of a streak."
+      - "{username}'s chair is still warm with luck, and he's running with ${balance:.2f}. It'll come back to haunt you."
+      - "You broke the rhythm, {username}. Took ${balance:.2f} and spoiled the energy for everyone. Not cool."
+      - "Luck loves the persistent, and you're running with ${balance:.2f}? The table won't forget this."
+
+  # Exit Taunts - Negative Balance (Loss)
+  negative:
+    fake_friendly:
+      - "Hey, {username}! Down ${abs_balance:.2f}? It's just paper, Killer! We're all friends here... the house wins sometimes!"
+      - "Breathe, {username}! You're ${abs_balance:.2f} lighter but wiser, right? The plastic's always waiting for your return!"
+      - "Look at that, {username}! ${abs_balance:.2f} in the red! Consider it an investment in your poker education, Genius!"
+      - "No biggie, {username}. ${abs_balance:.2f} is just a number. Tomorrow's a new day and the cards will flip."
+      - "Happens to the best of us, {username}. ${abs_balance:.2f} less in the wallet, but more experience in the head. Right?"
+      - "Don't take it to heart, {username}. ${abs_balance:.2f} is just a small price to pay for the fun."
+      - "Easy come, easy go, {username}. ${abs_balance:.2f} is chump change compared to what you'll win next time."
+    aggressive:
+      - "What is this, {username}? Down ${abs_balance:.2f} and running? This is a knitting circle or a poker table?"
+      - "{username} bleeds ${abs_balance:.2f} and bolts? The collection plate was hungry tonight! Don't come back broke!"
+      - "Folding with ${abs_balance:.2f} deficit, {username}? The house always wins, Genius! Always! Where's your pride?"
+      - "Broke too soon, {username}. ${abs_balance:.2f} was all it took to get you out of the game?"
+      - "{username}, you're running like a kid who lost his lunch money. ${abs_balance:.2f} damage and you're out of air?"
+      - "Lost ${abs_balance:.2f} and cut? You should've stayed and fought. Cowards don't win."
+      - "Look at {username}, leaving ${abs_balance:.2f} in the pot and running with his tail between his legs."
+    superstitious:
+      - "{username} down ${abs_balance:.2f}? You were breathing on the cards! Bad energy, pal!"
+      - "The chair was unlucky for you, {username}. ${abs_balance:.2f} gone because you messed with the feng shui!"
+      - "{username} leaves ${abs_balance:.2f} poorer? You broke the mojo! The table needed fresh energy anyway!"
+      - "{username}, you left ${abs_balance:.2f} here and took all the bad luck with you. Thanks, I guess."
+      - "The spirits weren't feeling {username} tonight. ${abs_balance:.2f} gone because of the evil eye, for sure."
+      - "Someone put a hex on you, {username}. ${abs_balance:.2f} vanished like it was never there. Go see a priest."
+      - "This table was cursed for you, {username}. ${abs_balance:.2f} is the price you paid to break the hex."
+
+  # Exit Taunts - Break Even
+  break_even:
+    fake_friendly:
+      - "Hey, {username}! Breaking even with ${prize_amount:.2f}? That's what I call a peaceful night! No drama, just friends!"
+      - "Breathe, {username}! ${prize_amount:.2f} exactly? That's basically winning in my book, Killer! Safe and sound!"
+      - "Look at that, {username}! Perfect break-even! The house respects a disciplined player, Genius! Respect!"
+      - "Got out safe, {username}. ${prize_amount:.2f} is exactly what you came with. Not losing is a victory."
+      - "A night of fun and ended with ${prize_amount:.2f}? Great outing, {username}. See you next time."
+      - "Cleared your head and came back with ${prize_amount:.2f}. Smart and steady, just the way I like it."
+      - "Status quo, {username}. ${prize_amount:.2f} and heading home. Sometimes not losing is the biggest win."
+    aggressive:
+      - "What is this, {username}? Breaking even with ${prize_amount:.2f}? This is a poker game or a knitting circle? Where's the action?"
+      - "{username} plays it safe with ${prize_amount:.2f}? I'm falling asleep here! Make a REAL move or go home!"
+      - "Exactly ${prize_amount:.2f}, {username}? Boring! Where's the thrill, Champ? You came to play or what?"
+      - "Tied at ${prize_amount:.2f}? That's like kissing your sister, {username}. Where's the excitement?"
+      - "{username}, you're vanilla. ${prize_amount:.2f} and out? We didn't open the table for this."
+      - "Played for hours just to come back with ${prize_amount:.2f}? Waste of electricity, honestly."
+      - "{username}, you're the most boring player we've had. ${prize_amount:.2f} and that's it? Go home."
+    superstitious:
+      - "{username} breaks even? You're neutralizing the cosmic balance! The universe hates indifference!"
+      - "${prize_amount:.2f} exactly, {username}? You're not committing to luck OR bad luck! Confusing the spirits!"
+      - "Breaking even, {username}? The table doesn't know whether to celebrate or cry! Pick a side, pal!"
+      - "You're stuck in the middle, {username}. ${prize_amount:.2f} is a state of zero energy. The table hates it."
+      - "The spirits here are confused by you, {username}. ${prize_amount:.2f} is neither meat nor milk. Bring some emotion."
+      - "{username}, you broke the wheel. ${prize_amount:.2f} is like stopping time. It'll bite you one day."
+      - "Perfect balance of ${prize_amount:.2f}. It's suspicious, {username}. You're not aligning with the cosmos."
+
+# Volatility Protocol - Moods
+volatility:
+  fake_friendly: "Hey, hey! Breathe, Killer. It's just paper. We're all friends here... some of us are just richer friends than others right now."
+  aggressive: "What is this, a knitting circle? Somebody make a move before I start charging rent by the minute."
+  superstitious: "You're sitting in the lucky chair, pal. Stop breathing so loudly, you're clogging up the luck."
+
+# Stage Directions
+stage_directions:
+  - "*Licks his thumb and starts counting a fresh stack of chips*"
+  - "*Adjusts a gold watch that clearly hasn't been set to the right time*"
+  - "*Taps his ring on the table as a player hesitates to bet*"
+  - "*Wipes a smudge off the table with a silk handkerchief and sighs*"
