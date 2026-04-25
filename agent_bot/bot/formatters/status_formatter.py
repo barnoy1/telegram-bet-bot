@@ -1,7 +1,7 @@
 """Formatter for group status display."""
 
 from typing import Dict, List
-from agent_bot.db.storage import Participant
+from agent_bot.db.models import Participant
 from agent_bot.bot.services.language_service import LanguageService
 
 
@@ -33,15 +33,20 @@ class StatusFormatter:
         active_participants = [p for p in participants if p.state in ("IN_GAME", "OUT")]
 
         output = (
-            f"🃏 **{header}** 🃏\n\n"
-            f"💰 **{total_pot_label}** ${total_pot:.2f}\n\n"
+            f"🃏 {header} 🃏\n\n"
+            f"💰 {total_pot_label}: ${total_pot:.2f}\n\n"
         )
 
         if active_participants:
-            output += f"👥 **{players_label}**:\n"
+            output += f"👥 {players_label}:\n"
             for p in active_participants:
                 status_emoji = "🎴" if p.state == "IN_GAME" else "🚪"
-                output += f"{status_emoji} {p.username} - ${p.current_bet_amount:.2f} ({p.state})\n"
+                # For OUT state, show prize amount (what they took out), otherwise show current_bet
+                if p.state.value == "OUT":
+                    balance = p.prize_amount
+                else:
+                    balance = p.current_bet_amount
+                output += f"{status_emoji} {p.username} - ${balance:.2f} ({p.state.value})\n"
         else:
             output += f"📭 {no_players}\n"
 

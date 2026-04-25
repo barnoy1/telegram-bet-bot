@@ -8,10 +8,9 @@ class MessageFormatter:
     """Formats bot messages for consistent presentation."""
 
     def __init__(self, personality: BookiePersonality = None, language_service: LanguageService = None, group_id: int = None):
-        if personality:
-            self.personality = personality
-        else:
-            self.personality = BookiePersonality(language_service=language_service)
+        # Use the personality passed in from main.py - it has language_service
+        # Only create a new one if none was passed (fallback)
+        self.personality = personality
         self.language_service = language_service
         self.group_id = group_id
 
@@ -37,6 +36,7 @@ class MessageFormatter:
             help_command = "Type `/h` for all commands"
 
         message = (
+            "\u200E"  # LTR marker to prevent Hebrew reversal
             "━━━━━━━━━━━━━\n"
             f"🃏 *{header}* 🃏\n"
             "━━━━━━━━━━━━━\n\n"
@@ -93,6 +93,7 @@ class MessageFormatter:
             h_desc = "Show this help"
 
         message = (
+            "\u200E"  # LTR marker to prevent Hebrew reversal
             "━━━━━━━━━━━━━\n"
             f"📚 *{header}* 📚\n"
             "━━━━━━━━━━━━━\n\n"
@@ -139,6 +140,7 @@ class MessageFormatter:
             help_instruction = "Type `/h` anytime"
 
         message = (
+            "\u200E"  # LTR marker to prevent Hebrew reversal
             "━━━━━━━━━━━━━\n"
             f"👋 *{header}* 👋\n"
             "━━━━━━━━━━━━━\n\n"

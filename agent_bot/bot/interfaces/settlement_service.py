@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from decimal import Decimal
-from agent_bot.db.storage import Participant
+from agent_bot.db.models import Participant
 
 
 class ISettlementService(ABC):

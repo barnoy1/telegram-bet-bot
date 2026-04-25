@@ -17,7 +17,9 @@ class StartCommand(ICommandHandler):
 
     def __init__(self, event_service, personality: BookiePersonality = None, language_service: LanguageService = None):
         self.event_service = event_service
-        self.personality = personality or BookiePersonality()
+        # Don't create a new personality - use the one passed in from main.py
+        # This ensures language_service is available
+        self.personality = personality
         self.language_service = language_service
 
     async def handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

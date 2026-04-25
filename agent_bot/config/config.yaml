@@ -1,10 +1,11 @@
 # Bot configuration
-version: 1.3.1
+version: 1.3.4
 
 bot:
   personality:
     enabled: true
     sassy_level: high  # low, medium, high
+    use_llm: true  # Use LLM for generating persona responses instead of phrase library
   
   inactivity:
     enabled: true

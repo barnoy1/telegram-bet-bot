@@ -6,12 +6,16 @@ import yaml
 # Project root (two levels up from config directory)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# Load environment variables - try docker folder first (for Docker context), then project root
-docker_env_path = PROJECT_ROOT / "docker" / ".env"
-if docker_env_path.exists():
-    load_dotenv(docker_env_path)
+# Load environment variables - check for custom ENV_FILE first, then docker folder, then project root
+custom_env_file = os.getenv("ENV_FILE")
+if custom_env_file:
+    load_dotenv(custom_env_file)
 else:
-    load_dotenv()
+    docker_env_path = PROJECT_ROOT / "docker" / ".env"
+    if docker_env_path.exists():
+        load_dotenv(docker_env_path)
+    else:
+        load_dotenv()
 
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -28,8 +32,14 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "events")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 
-# PostgreSQL connection string
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+# SQLite for local development (fallback)
+DATABASE_PATH = os.getenv("DATABASE_PATH", "./betting_bot.db")
+
+# PostgreSQL connection string (for Docker/production)
+POSTGRES_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+# Use DATABASE_URL from env if set, otherwise check for DATABASE_PATH, fallback to PostgreSQL
+DATABASE_URL = os.getenv("DATABASE_URL", DATABASE_PATH if os.getenv("DATABASE_PATH") else POSTGRES_URL)
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -60,6 +70,7 @@ VERSION = _yaml_config.get('version', '1.0.0')
 # Personality configuration
 PERSONALITY_ENABLED = _bot_config.get('personality', {}).get('enabled', True)
 PERSONALITY_SASSY_LEVEL = _bot_config.get('personality', {}).get('sassy_level', 'medium')
+PERSONALITY_USE_LLM = _bot_config.get('personality', {}).get('use_llm', True)
 
 # Inactivity configuration
 INACTIVITY_ENABLED = _bot_config.get('inactivity', {}).get('enabled', True)

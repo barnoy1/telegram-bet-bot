@@ -11,9 +11,11 @@ from agent_bot.bot.services.language_service import LanguageService
 class HelpCommand(ICommandHandler):
     """Handler for the help command."""
 
-    def __init__(self, event_service=None, personality: BookiePersonality = None, language_service: LanguageService = None):
+    def __init__(self, event_service, personality: BookiePersonality = None, language_service: LanguageService = None):
         self.event_service = event_service
-        self.personality = personality or BookiePersonality()
+        # Don't create a new personality - use the one passed in from main.py
+        # This ensures language_service is available
+        self.personality = personality
         self.language_service = language_service
 
     async def handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

@@ -36,6 +36,7 @@ from agent_bot.bot.commands.reset_command import ResetCommand
 from agent_bot.bot.commands.version_command import VersionCommand
 from agent_bot.bot.commands.language_command import LanguageCommand
 from agent_bot.bot.personality.bookie_personality import BookiePersonality
+from agent_bot.config.settings import PERSONALITY_USE_LLM
 from agent_bot.bot.services.inactivity_monitor import InactivityMonitor
 from agent_bot.bot.services.language_service import LanguageService
 
@@ -61,7 +62,7 @@ def main():
     language_service = LanguageService(storage)
 
     # Initialize personality with language service
-    personality = BookiePersonality(language_service=language_service)
+    personality = BookiePersonality(language_service=language_service, use_llm=PERSONALITY_USE_LLM)
 
     # Create command registry
     command_registry = CommandRegistry()
@@ -96,7 +97,16 @@ def main():
     application.add_handler(CommandHandler("u", betting_handler.undo))
     application.add_handler(CommandHandler("r", betting_handler.reset))
 
-    # Register message handlers
+    # Register message handlers for text commands without slash
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^str$'), betting_handler.start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^h$'), betting_handler.help))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^out$'), betting_handler.out))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^s$'), betting_handler.status))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^l$'), betting_handler.language))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^t$'), betting_handler.transactions))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^v$'), betting_handler.version))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^u$'), betting_handler.undo))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^r$'), betting_handler.reset))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, betting_handler.handle_numeric_message))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, betting_handler.new_chat_members))
     application.add_handler(ChatMemberHandler(betting_handler.chat_member))

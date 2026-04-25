@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 import logging
+import random
 import arabic_reshaper
 from bidi.algorithm import get_display
 
@@ -49,6 +50,8 @@ class LanguageService:
     def detect_group_language(self, group_id: int, fallback_language: str = 'en') -> str:
         """Detect the most common language for a group."""
         stats = self.storage.get_language_stats(group_id)
+        
+        logger.info(f"Language stats for group {group_id}: {stats}")
         
         if not stats:
             logger.info(f"No language stats for group {group_id}, using fallback: {fallback_language}")
@@ -100,6 +103,9 @@ class LanguageService:
             value = translations
             for key in keys:
                 value = value[key]
+            # Handle lists by selecting a random element
+            if isinstance(value, list):
+                value = random.choice(value)
             return str(value)
         except (KeyError, TypeError):
             logger.warning(f"Translation key not found: {key_path} for language {lang}")

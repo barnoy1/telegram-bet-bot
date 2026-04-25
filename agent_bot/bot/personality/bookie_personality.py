@@ -1,10 +1,13 @@
 """Bookie personality service for sassy bot responses."""
 
+import logging
 import random
 from agent_bot.bot.personality.phrases import PhraseLibrary, PhraseCategory
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 from typing import Optional, Dict
 from agent_bot.config.settings import PERSONALITY_ENABLED, PERSONALITY_SASSY_LEVEL
 
+logger = logging.getLogger(__name__)
 
 class Mood:
     """Mood states for the Sleazy persona volatility protocol."""
@@ -26,17 +29,20 @@ class BookiePersonality:
         "*Straightens his tie that costs more than your car*",
     ]
 
-    def __init__(self, enabled: bool = None, sassy_level: str = None, language_service=None):
+    def __init__(self, enabled: bool = None, sassy_level: str = None, language_service=None, use_llm: bool = True):
         """Initialize the bookie personality.
         
         Args:
             enabled: Whether the personality is enabled (uses config if not provided)
             sassy_level: The level of sassiness (low, medium, high) (uses config if not provided)
             language_service: Language service for translated phrases
+            use_llm: Whether to use LLM for generating responses (default True)
         """
         self.enabled = enabled if enabled is not None else PERSONALITY_ENABLED
         self.sassy_level = sassy_level if sassy_level is not None else PERSONALITY_SASSY_LEVEL
         self.language_service = language_service
+        self.use_llm = use_llm
+        self.llm_service = LLMPersonalityService() if use_llm else None
 
     def _get_mood(self) -> str:
         """Get current mood based on volatility protocol.
@@ -78,6 +84,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_rebuy_response(username)
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM rebuy response failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.REBUY)
         return self._add_stage_direction(phrase)
 
@@ -116,6 +132,15 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_general_response()
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM general response failed, falling back to phrases: {e}")
+        
         # Try to get translated phrase if language service is available
         if self.language_service and group_id:
             try:
@@ -125,12 +150,16 @@ class BookiePersonality:
                 # Handle if translation returns a list
                 if isinstance(phrase, list):
                     phrase = random.choice(phrase)
+                logger.info(f"Using translated phrase for group {group_id}: {phrase[:50]}...")
                 return self._add_stage_direction(phrase)
-            except Exception:
+            except Exception as e:
                 # Fallback to English if translation fails
+                logger.warning(f"Translation failed for group {group_id}: {e}, falling back to English")
                 pass
         
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.GENERAL_SASSY)
+        logger.info(f"Using English phrase for group {group_id}")
         return self._add_stage_direction(phrase)
 
     def get_inactivity_nasty(self) -> Optional[str]:
@@ -142,6 +171,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_inactivity_response()
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM inactivity response failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.INACTIVITY_NASTY)
         return self._add_stage_direction(phrase)
 
@@ -154,6 +193,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_greeting_response()
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM greeting response failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.GREETING)
         return self._add_stage_direction(phrase)
 
@@ -169,6 +218,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_new_player_response(username)
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM new player response failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.NEW_PLAYER)
         return self._add_stage_direction(phrase)
 
@@ -184,6 +243,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_bet_response("player", amount)
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM bet reaction failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         # Use big bet reaction for large amounts
         if amount >= 100:
             phrase = PhraseLibrary.get_phrase(PhraseCategory.BIG_BET)
@@ -201,6 +270,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_hesitation_response()
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM hesitation taunt failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.HESITATION)
         return self._add_stage_direction(phrase)
 
@@ -216,6 +295,16 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_out_response(username, 100)  # Assume positive balance
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM winner leaving taunt failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.WINNER_LEAVING)
         return self._add_stage_direction(phrase)
 
@@ -231,5 +320,48 @@ class BookiePersonality:
         if not self.enabled:
             return None
         
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_out_response(username, -100)  # Assume negative balance
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM loser leaving taunt failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library
         phrase = PhraseLibrary.get_phrase(PhraseCategory.LOSER_LEAVING)
+        return self._add_stage_direction(phrase)
+
+    def get_out_taunt(self, username: str, balance: float) -> Optional[str]:
+        """Get a taunt for a player leaving with a specific balance.
+        
+        Args:
+            username: The username of the leaving player
+            balance: The player's balance (positive = profit, negative = loss)
+            
+        Returns:
+            A taunt phrase or None if personality disabled
+        """
+        if not self.enabled:
+            return None
+        
+        # Try LLM first if enabled
+        if self.use_llm and self.llm_service:
+            try:
+                response = self.llm_service.get_out_response(username, balance)
+                if response:
+                    return self._add_stage_direction(response)
+            except Exception as e:
+                logger.warning(f"LLM out taunt failed, falling back to phrases: {e}")
+        
+        # Fallback to phrase library based on balance
+        if balance > 0:
+            phrase = PhraseLibrary.get_phrase(PhraseCategory.WINNER_LEAVING)
+        elif balance < 0:
+            phrase = PhraseLibrary.get_phrase(PhraseCategory.LOSER_LEAVING)
+        else:
+            # Break even - use general sassy
+            phrase = PhraseLibrary.get_phrase(PhraseCategory.GENERAL_SASSY)
+        
         return self._add_stage_direction(phrase)

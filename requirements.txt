@@ -10,3 +10,5 @@ pytest-asyncio
 pytest-cov
 arabic-reshaper
 python-bidi
+numpy
+debugpy
