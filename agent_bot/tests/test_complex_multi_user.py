@@ -140,6 +140,11 @@ class TestComplexMultiUserSimulation(unittest.TestCase):
         self.event_service.place_bet(self.event_id, self.users["user3"]["id"], self.users["user3"]["name"], Decimal("60"))
         self.event_service.user_out(self.event_id, self.users["user3"]["id"], self.users["user3"]["name"], Decimal("70"))
         self.event_service.place_bet(self.event_id, self.users["user3"]["id"], self.users["user3"]["name"], Decimal("50"))
+
+        # Verify prize accumulation for user3
+        p3_after_second_out = self.storage.get_participant(self.event_id, self.users["user3"]["id"])
+        # Trace: bet 100, out 90 (prize=90, bet=10), rebuy 60 (prize=30, bet=70), out 70 (prize=100, bet=0), rebuy 50 (prize=50, bet=50)
+        self.assertEqual(p3_after_second_out.prize_amount, Decimal("50"))
         
         # Check status
         status = self.event_service.get_status(self.event_id)

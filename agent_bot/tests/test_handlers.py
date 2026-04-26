@@ -171,6 +171,45 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.assertIsNotNone(ron_status)
         self.assertEqual(ron_status.prize_amount, Decimal("0"))
 
+    def test_multiple_outs_accumulate_prize(self):
+        """Test that multiple outs accumulate prize money."""
+        user1_id = 6183561523
+        user2_id = 1234567890
+
+        self.event_service.start_event(self.event_id, "Test Group", user1_id, "Ron")
+        self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("100"))
+        self.event_service.place_bet(self.event_id, user2_id, "Alice", Decimal("50"))
+
+        # First out: Ron takes $10
+        self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("10"))
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        self.assertEqual(participant.prize_amount, Decimal("10"))
+
+        # Rebuy
+        self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("20"))
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        # Prize should be reduced by rebuy amount if rebuy <= prize
+        # 10 - 20 would be negative, so prize becomes 0 and rebuy uses new money
+        self.assertEqual(participant.prize_amount, Decimal("0"))
+
+        # Second out: Ron takes $15
+        self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("15"))
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        # Prize should accumulate: 0 + 15 = 15
+        self.assertEqual(participant.prize_amount, Decimal("15"))
+
+        # Rebuy again
+        self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("5"))
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        # Prize should be reduced: 15 - 5 = 10
+        self.assertEqual(participant.prize_amount, Decimal("10"))
+
+        # Third out: Ron takes $25
+        self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("25"))
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        # Prize should accumulate: 10 + 25 = 35
+        self.assertEqual(participant.prize_amount, Decimal("35"))
+
     def test_adding_to_existing_bet(self):
         """Test adding to existing bet (not rebuy)."""
         user_id = 6183561523

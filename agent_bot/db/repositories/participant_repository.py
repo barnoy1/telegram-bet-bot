@@ -94,14 +94,15 @@ class ParticipantRepository(BaseRepository):
         return False
 
     def set_participant_out(self, event_id: int, user_id: int, prize_amount: Decimal) -> bool:
-        """Set participant as OUT with prize amount."""
+        """Set participant as OUT with prize amount (accumulates with existing prize)."""
         participant = self.session.query(ParticipantModel).filter(
             ParticipantModel.event_id == event_id,
             ParticipantModel.user_id == user_id
         ).first()
         if participant:
             participant.state = OUT
-            participant.prize_amount = prize_amount
+            # Accumulate prize amount (add to existing prize if any)
+            participant.prize_amount += prize_amount
             # Reduce current_bet_amount by prize_amount (what they're taking from pot)
             # If they bet 90 and take 60, remaining in pot is 30
             participant.current_bet_amount = max(Decimal("0"), participant.current_bet_amount - prize_amount)
