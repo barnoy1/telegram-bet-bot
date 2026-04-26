@@ -1,12 +1,11 @@
 """Group event handlers (new members, chat member updates)."""
 
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from agent_bot.bot.formatters.message_formatter import MessageFormatter
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
-from agent_bot.bot.services.language_service import LanguageService
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +15,11 @@ class GroupHandler:
 
     def __init__(
         self,
-        personality: BookiePersonality = None,
-        language_service: LanguageService = None,
+        personality: LLMPersonalityService = None,
         storage=None,
         update_activity_callback=None
     ):
-        self.personality = personality or BookiePersonality()
-        self.language_service = language_service
+        self.personality = personality
         self.storage = storage
         self.update_activity = update_activity_callback
 
@@ -38,8 +35,8 @@ class GroupHandler:
                 group_id = update.message.chat.id
                 chat_title = update.message.chat.title or f"Group {group_id}"
 
-                # Create formatter with language service
-                message_formatter = MessageFormatter(self.personality, self.language_service, group_id)
+                # Create formatter (English only)
+                message_formatter = MessageFormatter(self.personality)
 
                 await update.message.reply_text(
                     message_formatter.format_welcome_message(),
@@ -52,48 +49,6 @@ class GroupHandler:
                 break
 
     async def chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle chat member updates to track languages when users join."""
-        if not update.chat_member:
-            return
-
-        # Track language when a user joins the group
-        new_member = update.chat_member.new_chat_member
-        old_member = update.chat_member.old_chat_member
-
-        # Check if user joined (was not a member before, is now)
-        if old_member.status in ['left', 'kicked'] and new_member.status in ['member', 'administrator']:
-            group_id = update.chat_member.chat.id
-            user_id = new_member.user.id
-            language_code = new_member.user.language_code or 'en'
-
-            # Track language in database
-            try:
-                if self.storage:
-                    self.storage.increment_language(group_id, language_code)
-                    logger.info(f"Tracked language {language_code} for user {user_id} in group {group_id}")
-            except Exception as e:
-                logger.error(f"Failed to track language: {e}")
-
-            # If administrator joined, ask for language selection
-            if new_member.status == 'administrator':
-                await self._prompt_language_selection(update, group_id)
-
-    async def _prompt_language_selection(self, update: Update, group_id: int) -> None:
-        """Prompt administrator to select language for the group."""
-        keyboard = [
-            [
-                InlineKeyboardButton("🇬🇧 English", callback_data=f"lang_en_{group_id}"),
-                InlineKeyboardButton("🇮🇱 עברית", callback_data=f"lang_he_{group_id}"),
-                InlineKeyboardButton("🇷🇺 Русский", callback_data=f"lang_ru_{group_id}"),
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        message = (
-            "🌐 **Choose Language / בחר שפה / Выберите язык**\n\n"
-            "Select the language for this group:\n"
-            "בחר את השפה עבור הקבוצה:\n"
-            "Выберите язык для этой группы:"
-        )
-        
-        await update.chat_member.chat.send_message(message, reply_markup=reply_markup, parse_mode="Markdown")
+        """Handle chat member updates (language tracking disabled)."""
+        # Language tracking disabled - English only
+        pass

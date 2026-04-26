@@ -1,5 +1,5 @@
 # Bot configuration
-version: 1.3.4
+version: 1.3.5W
 
 bot:
   personality:
@@ -10,5 +10,5 @@ bot:
   inactivity:
     enabled: true
     timeout_minutes: 30  # Time before nasty remark
-    random_message_interval_minutes: 10  # Send random message every X minutes
+    random_message_interval_minutes: 90  # Send random message every X minutes
     max_random_messages: 3  # Send N random messages before nasty remark

@@ -5,8 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from telegram import Bot
-from agent_bot.bot.personality.greetings import GreetingLibrary
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 from agent_bot.config.settings import (
     INACTIVITY_ENABLED,
     INACTIVITY_TIMEOUT_MINUTES,
@@ -20,19 +19,17 @@ logger = logging.getLogger(__name__)
 class InactivityMonitor:
     """Service for monitoring group inactivity and sending timed messages."""
 
-    def __init__(self, bot: Bot, personality: BookiePersonality, storage, language_service=None):
+    def __init__(self, bot: Bot, personality: LLMPersonalityService, storage):
         """Initialize the inactivity monitor.
-        
+
         Args:
             bot: Telegram Bot instance
-            personality: BookiePersonality instance for sassy remarks
+            personality: LLMPersonalityService instance for sassy remarks
             storage: Storage instance for tracking activity
-            language_service: Language service for translated greetings
         """
         self.bot = bot
         self.personality = personality
         self.storage = storage
-        self.language_service = language_service
         self.enabled = INACTIVITY_ENABLED
         self.timeout_minutes = INACTIVITY_TIMEOUT_MINUTES
         self.interval_minutes = INACTIVITY_RANDOM_MESSAGE_INTERVAL_MINUTES
@@ -90,17 +87,17 @@ class InactivityMonitor:
 
     async def send_greeting(self, group_id: int):
         """Send a random greeting message to a group.
-        
+
         Args:
             group_id: Telegram group ID
         """
-        greeting_lib = GreetingLibrary(self.language_service)
-        greeting = greeting_lib.get_random_greeting(group_id)
-        try:
-            await self.bot.send_message(chat_id=group_id, text=f"💬 {greeting}", parse_mode="Markdown")
-            logger.info(f"Sent greeting to group {group_id}")
-        except Exception as e:
-            logger.error(f"Failed to send greeting to group {group_id}: {e}")
+        greeting = await self.personality.get_greeting_response() if self.personality else None
+        if greeting:
+            try:
+                await self.bot.send_message(chat_id=group_id, text=f"💬 {greeting}", parse_mode="Markdown")
+                logger.info(f"Sent greeting to group {group_id}")
+            except Exception as e:
+                logger.error(f"Failed to send greeting to group {group_id}: {e}")
 
     async def send_nasty_remark(self, group_id: int):
         """Send a nasty remark to an inactive group.
@@ -108,7 +105,7 @@ class InactivityMonitor:
         Args:
             group_id: Telegram group ID
         """
-        remark = self.personality.get_inactivity_nasty()
+        remark = await self.personality.get_inactivity_response() if self.personality else None
         if remark:
             try:
                 await self.bot.send_message(chat_id=group_id, text=f"💬 {remark}", parse_mode="Markdown")

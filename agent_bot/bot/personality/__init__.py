@@ -1,6 +1,5 @@
 """Personality module for bot character and messaging."""
 
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
-from agent_bot.bot.personality.phrases import PhraseCategory
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 
-__all__ = ["BookiePersonality", "PhraseCategory"]
+__all__ = ["LLMPersonalityService"]

@@ -26,7 +26,7 @@ services:
     image: ollama/ollama:latest
     container_name: betting-ollama
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ${HOME}/.ollama:/root/.ollama
     environment:
@@ -56,6 +56,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
+      - DEBUG_MODE=false
     networks:
       - betting-network
     restart: unless-stopped

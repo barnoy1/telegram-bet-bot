@@ -18,11 +18,18 @@ class HungarianSettlementService:
         """
         Calculate minimal settlement transactions using greedy algorithm.
 
-        Algorithm:
+        Algorithm (Debt Simplification):
         1. Compute net position for each participant (current_bet - prize)
         2. Separate into debtors (negative balance) and creditors (positive balance)
-        3. Match debtors with creditors greedily to minimize transactions
-        4. Optimize for single debtor → single creditor when possible
+        3. Sort debtors from most negative to least negative (largest debt first)
+        4. Sort creditors from most positive to least positive (largest credit first)
+        5. Use two-pointer technique: match largest debtor with largest creditor
+        6. Settle for the minimum of the two absolute values
+        7. Update balances and remove settled parties from the list
+        8. Repeat until all balances are zero
+
+        This greedy approach provides the optimal balance between calculation speed
+        and a low number of transactions for practical applications.
 
         Args:
             participants: List of Participant objects with bets and prizes
@@ -55,12 +62,14 @@ class HungarianSettlementService:
         ]
 
         # Sort by amount (process largest first for optimal matching)
+        # Debtors: most negative (largest debt) first
         debtors.sort(key=lambda x: x[1], reverse=True)
+        # Creditors: most positive (largest credit) first
         creditors.sort(key=lambda x: x[1], reverse=True)
 
         logger.info(f"Settlement calculation: {len(debtors)} debtors, {len(creditors)} creditors")
 
-        # Greedy matching with optimization for minimal transactions
+        # Greedy matching using two-pointer technique
         transactions = []
         debtor_idx = 0
         creditor_idx = 0
@@ -69,18 +78,18 @@ class HungarianSettlementService:
             debtor_uid, debtor_amount = debtors[debtor_idx]
             creditor_uid, creditor_amount = creditors[creditor_idx]
 
-            # Settle as much as possible between these two
+            # Settle the minimum of the two absolute values
             settlement = min(debtor_amount, creditor_amount)
             settlement = cls._round_decimal(settlement)
 
             if settlement > Decimal("0"):
                 transactions.append((debtor_uid, creditor_uid, settlement))
 
-            # Update amounts
+            # Update balances
             debtors[debtor_idx] = (debtor_uid, debtor_amount - settlement)
             creditors[creditor_idx] = (creditor_uid, creditor_amount - settlement)
 
-            # Move to next if current is settled
+            # Remove settled parties from the list
             if debtors[debtor_idx][1] <= Decimal("0"):
                 debtor_idx += 1
             if creditors[creditor_idx][1] <= Decimal("0"):

@@ -16,7 +16,9 @@ if args.version:
     sys.exit(0)
 
 import asyncio
+import os
 import logging
+import re
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ChatMemberHandler, CallbackQueryHandler, filters, ContextTypes
@@ -34,11 +36,9 @@ from agent_bot.bot.commands.transactions_command import TransactionsCommand
 from agent_bot.bot.commands.undo_command import UndoCommand
 from agent_bot.bot.commands.reset_command import ResetCommand
 from agent_bot.bot.commands.version_command import VersionCommand
-from agent_bot.bot.commands.language_command import LanguageCommand
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
-from agent_bot.config.settings import PERSONALITY_USE_LLM
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
+from agent_bot.config.settings import PERSONALITY_ENABLED
 from agent_bot.bot.services.inactivity_monitor import InactivityMonitor
-from agent_bot.bot.services.language_service import LanguageService
 
 # Configure logging
 logging.basicConfig(
@@ -58,23 +58,19 @@ def main():
     # Initialize EventService with state machine architecture
     event_service = EventService(storage)
 
-    # Initialize language service
-    language_service = LanguageService(storage)
-
-    # Initialize personality with language service
-    personality = BookiePersonality(language_service=language_service, use_llm=PERSONALITY_USE_LLM)
+    # Initialize personality (LLM-based)
+    personality = LLMPersonalityService() if PERSONALITY_ENABLED else None
 
     # Create command registry
     command_registry = CommandRegistry()
-    command_registry.register("str", StartCommand(event_service, personality, language_service))
-    command_registry.register("h", HelpCommand(event_service, personality, language_service))
+    command_registry.register("str", StartCommand(event_service, personality))
+    command_registry.register("h", HelpCommand(event_service, personality))
     command_registry.register("out", OutCommand(event_service, personality))
-    command_registry.register("s", StatusCommand(event_service, language_service))
-    command_registry.register("l", LanguageCommand(language_service))
+    command_registry.register("s", StatusCommand(event_service))
     command_registry.register("t", TransactionsCommand(event_service))
     command_registry.register("u", UndoCommand(event_service))
     command_registry.register("r", ResetCommand(event_service))
-    command_registry.register("v", VersionCommand(event_service, personality))
+    command_registry.register("v", VersionCommand())
 
     # Create application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -82,35 +78,33 @@ def main():
     # Initialize inactivity monitor
     inactivity_monitor = None
     if INACTIVITY_ENABLED:
-        inactivity_monitor = InactivityMonitor(application.bot, personality, storage, language_service=language_service)
+        inactivity_monitor = InactivityMonitor(application.bot, personality, storage)
 
     # Initialize handlers
-    betting_handler = BettingHandler(event_service, command_registry, personality, inactivity_monitor, language_service)
+    betting_handler = BettingHandler(event_service, command_registry, personality, inactivity_monitor)
 
     # Register command handlers
     application.add_handler(CommandHandler("str", betting_handler.start))
     application.add_handler(CommandHandler("h", betting_handler.help))
     application.add_handler(CommandHandler("out", betting_handler.out))
     application.add_handler(CommandHandler("s", betting_handler.status))
-    application.add_handler(CommandHandler("l", betting_handler.language))
     application.add_handler(CommandHandler("t", betting_handler.transactions))
     application.add_handler(CommandHandler("u", betting_handler.undo))
     application.add_handler(CommandHandler("r", betting_handler.reset))
 
-    # Register message handlers for text commands without slash
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^str$'), betting_handler.start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^h$'), betting_handler.help))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^out$'), betting_handler.out))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^s$'), betting_handler.status))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^l$'), betting_handler.language))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^t$'), betting_handler.transactions))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^v$'), betting_handler.version))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^u$'), betting_handler.undo))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^r$'), betting_handler.reset))
+    # Register message handlers for text commands without slash (case-insensitive)
+    # These must be registered BEFORE the numeric handler to take precedence
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^str\b'), betting_handler.start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^h\b'), betting_handler.help))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^out\b'), betting_handler.out))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^s\b'), betting_handler.status))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^t\b'), betting_handler.transactions))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^v\b'), betting_handler.version))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^u\b'), betting_handler.undo))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'(?i)^r\b'), betting_handler.reset))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, betting_handler.handle_numeric_message))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, betting_handler.new_chat_members))
     application.add_handler(ChatMemberHandler(betting_handler.chat_member))
-    application.add_handler(CallbackQueryHandler(betting_handler.handle_language_selection, pattern=r'^lang_'))
 
     # Start bot
     logger.info("Bot is running. Press Ctrl+C to stop.")

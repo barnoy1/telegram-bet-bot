@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 
 from agent_bot.core.event_service import EventService
 from agent_bot.bot.utils.user_utils import get_display_name
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +20,11 @@ class BetHandler:
     def __init__(
         self,
         event_service: EventService,
-        personality: BookiePersonality = None,
+        personality: LLMPersonalityService = None,
         update_activity_callback=None
     ):
         self.event_service = event_service
-        self.personality = personality or BookiePersonality()
+        self.personality = personality
         self.update_activity = update_activity_callback
 
     async def handle_numeric_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -49,7 +49,6 @@ class BetHandler:
             'h': 'h',
             'out': 'out',
             's': 's',
-            'l': 'l',
             't': 't',
             'u': 'u',
             'r': 'r',
@@ -58,9 +57,9 @@ class BetHandler:
         
         for cmd in command_map.values():
             if text_lower == cmd or text_lower.startswith(cmd + ' '):
-                logger.info(f"Detected command without / prefix: {text}")
+                logger.info(f"Detected command without / prefix: {text} - letting command handler process it")
                 # Return without handling - let command handler deal with it
-                return BETTING
+                return None
 
         # Check if message is a valid number
         try:
@@ -99,12 +98,12 @@ class BetHandler:
 
                 # Send rebuy taunt if applicable
                 if is_rebuy:
-                    taunt = self.personality.get_rebuy_taunt(username)
+                    taunt = await self.personality.get_rebuy_response(username) if self.personality else None
                     if taunt:
                         await update.message.reply_text(f"💬 {taunt}", parse_mode="Markdown")
                 # Send action taunt for adding to bet
                 elif is_adding:
-                    taunt = self.personality.get_bet_reaction(float(amount))
+                    taunt = await self.personality.get_bet_response(username, float(amount)) if self.personality else None
                     if taunt:
                         await update.message.reply_text(f"💬 {taunt}", parse_mode="Markdown")
             else:

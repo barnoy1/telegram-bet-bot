@@ -6,10 +6,9 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from agent_bot.core.event_service import EventService
 from agent_bot.bot.commands.command_registry import CommandRegistry
-from agent_bot.bot.personality.bookie_personality import BookiePersonality
+from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 from agent_bot.bot.services.inactivity_monitor import InactivityMonitor
-from agent_bot.bot.services.language_service import LanguageService
-from agent_bot.bot.handlers import CommandHandler, GroupHandler, LanguageHandler, BetHandler
+from agent_bot.bot.handlers import CommandHandler, GroupHandler, BetHandler
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +22,13 @@ class BettingHandler:
         self,
         event_service: EventService,
         command_registry: CommandRegistry,
-        personality: BookiePersonality = None,
-        inactivity_monitor: InactivityMonitor = None,
-        language_service: LanguageService = None
+        personality: LLMPersonalityService = None,
+        inactivity_monitor: InactivityMonitor = None
     ):
         self.event_service = event_service
         self.command_registry = command_registry
-        self.personality = personality or BookiePersonality()
+        self.personality = personality
         self.inactivity_monitor = inactivity_monitor
-        self.language_service = language_service
 
         # Initialize specialized handlers
         self.command_handler = CommandHandler(
@@ -40,11 +37,9 @@ class BettingHandler:
         )
         self.group_handler = GroupHandler(
             personality,
-            language_service,
             event_service.storage,
             self._update_activity
         )
-        self.language_handler = LanguageHandler(event_service.storage)
         self.bet_handler = BetHandler(
             event_service,
             personality,
@@ -71,10 +66,6 @@ class BettingHandler:
         """Handle s command."""
         return await self.handle_command("s", update, context)
 
-    async def language(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Handle l command."""
-        return await self.handle_command("l", update, context)
-
     async def transactions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handle t command."""
         return await self.handle_command("t", update, context)
@@ -98,10 +89,6 @@ class BettingHandler:
     async def chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle chat member updates."""
         await self.group_handler.chat_member(update, context)
-
-    async def handle_language_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle language selection callback."""
-        await self.language_handler.handle_language_selection(update, context)
 
     async def handle_numeric_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handle numeric messages as bets."""
