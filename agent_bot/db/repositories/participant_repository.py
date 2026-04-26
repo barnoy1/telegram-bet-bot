@@ -60,13 +60,32 @@ class ParticipantRepository(BaseRepository):
         return False
 
     def rebuy_participant(self, event_id: int, user_id: int, new_bet_amount: Decimal) -> bool:
-        """Handle rebuy by resetting current_bet_amount to new amount and adding to total."""
+        """Handle rebuy by using prize money if available, then adding new money.
+
+        Logic:
+        - If new_bet_amount <= prize_amount: Use prize money, keep remainder
+        - If new_bet_amount > prize_amount: Use all prize money, add difference as new money
+        - current_bet_amount is added to (not overwritten) to preserve remaining pot from previous bet
+        """
         participant = self.session.query(ParticipantModel).filter(
             ParticipantModel.event_id == event_id,
             ParticipantModel.user_id == user_id
         ).first()
         if participant:
-            participant.current_bet_amount = new_bet_amount
+            # Handle prize money usage
+            if participant.prize_amount > 0:
+                if new_bet_amount <= participant.prize_amount:
+                    # Scenario 1: Rebuying with less than or equal to prize amount
+                    # Use prize money, keep remainder
+                    participant.prize_amount -= new_bet_amount
+                else:
+                    # Scenario 2: Rebuying with more than prize amount
+                    # Use all prize money, the rest is new money
+                    # prize_amount becomes 0, total_bet_amount increases by new_bet_amount
+                    participant.prize_amount = Decimal("0")
+
+            # Add new bet to current_bet_amount (preserves remaining pot from previous bet)
+            participant.current_bet_amount += new_bet_amount
             participant.total_bet_amount += new_bet_amount
             participant.state = IN_GAME
             participant.settled_at = None
@@ -83,6 +102,9 @@ class ParticipantRepository(BaseRepository):
         if participant:
             participant.state = OUT
             participant.prize_amount = prize_amount
+            # Reduce current_bet_amount by prize_amount (what they're taking from pot)
+            # If they bet 90 and take 60, remaining in pot is 30
+            participant.current_bet_amount = max(Decimal("0"), participant.current_bet_amount - prize_amount)
             participant.settled_at = datetime.utcnow()
             self.commit()
             return True
@@ -119,6 +141,21 @@ class ParticipantRepository(BaseRepository):
         self.commit()
         return result.rowcount > 0
 
+    def reset_all_participants(self, event_id: int) -> bool:
+        """Reset all participants for an event (clear debts/winnings, reset state)."""
+        participants = self.session.query(ParticipantModel).filter(
+            ParticipantModel.event_id == event_id
+        ).all()
+        for participant in participants:
+            participant.state = NOT_JOINED
+            participant.total_bet_amount = Decimal("0")
+            participant.current_bet_amount = Decimal("0")
+            participant.prize_amount = Decimal("0")
+            participant.rebuy_count = 0
+            participant.settled_at = None
+        self.commit()
+        return len(participants) > 0
+
     def get_in_game_participant_count(self, event_id: int) -> int:
         """Get count of IN_GAME participants."""
         count = self.session.query(ParticipantModel).filter(
@@ -128,12 +165,27 @@ class ParticipantRepository(BaseRepository):
         return count
 
     def get_current_pot(self, event_id: int) -> Decimal:
-        """Calculate current pot (sum of current bets minus prizes for all participants)."""
-        result = self.session.query(
-            func.sum(ParticipantModel.current_bet_amount - ParticipantModel.prize_amount)
+        """Calculate current pot (sum of current bets for IN_GAME players + remaining bets from OUT players)."""
+        # Sum bets from IN_GAME players
+        in_game_result = self.session.query(
+            func.sum(ParticipantModel.current_bet_amount)
         ).filter(
-            ParticipantModel.event_id == event_id
+            ParticipantModel.event_id == event_id,
+            ParticipantModel.state == IN_GAME
         ).scalar()
-        if result:
-            return Decimal(str(result))
-        return Decimal("0")
+
+        # Sum remaining bets from OUT players (what they left in the pot)
+        out_result = self.session.query(
+            func.sum(ParticipantModel.current_bet_amount)
+        ).filter(
+            ParticipantModel.event_id == event_id,
+            ParticipantModel.state == OUT
+        ).scalar()
+
+        total = Decimal("0")
+        if in_game_result:
+            total += Decimal(str(in_game_result))
+        if out_result:
+            total += Decimal(str(out_result))
+
+        return total

@@ -1,11 +1,13 @@
 """Out command handler."""
 
+import asyncio
 from decimal import Decimal
 from telegram import Update
 from telegram.ext import ContextTypes
 from agent_bot.bot.interfaces.command_handler import ICommandHandler
 from agent_bot.bot.personality.llm_persona_service import LLMPersonalityService
 from agent_bot.bot.utils.user_utils import get_display_name
+from agent_bot.config.settings import BIG_POT_PERCENT
 
 # Conversation state
 BETTING = 0
@@ -50,24 +52,24 @@ class OutCommand(ICommandHandler):
             await update.message.reply_text("❌ Invalid amount. Use a positive number.", parse_mode="Markdown")
             return BETTING
 
-        # Get current pot for taunt
-        status = self.event_service.get_status(group_id)
-        total_pot = status["current_pot"] if status else Decimal("0")
-
-        # Check for big pot taunt (using LLM) - only if pot is significant
-        if self.personality and total_pot >= 500:
-            try:
-                taunt = await self.personality.get_out_response(username, float(amount))
-                if taunt:
-                    await update.message.reply_text(f"💬 {taunt}", parse_mode="Markdown")
-            except Exception as e:
-                logger = __import__('logging').getLogger(__name__)
-                logger.warning(f"Failed to generate out taunt: {e}")
-
-        # Set user out via EventService
+        # Set user out via EventService first to get participant data
         success, message = self.event_service.user_out(group_id, user_id, username, amount)
 
         if success:
+            # Get participant to calculate balance for LLM taunt
+            from agent_bot.db.storage import BettingStorage
+            storage = BettingStorage()
+            participant = storage.get_participant(group_id, user_id)
+            balance = float(amount - participant.total_bet_amount) if participant else 0.0
+
+            # Send LLM taunt asynchronously (non-blocking)
+            if self.personality:
+                try:
+                    asyncio.create_task(self.personality.send_out_response_async(username, balance, float(amount), update, context))
+                except Exception as e:
+                    logger = __import__('logging').getLogger(__name__)
+                    logger.warning(f"Failed to schedule out taunt: {e}")
+
             await update.message.reply_text(f"✅ {message}", parse_mode="Markdown")
         else:
             await update.message.reply_text(f"❌ {message}", parse_mode="Markdown")

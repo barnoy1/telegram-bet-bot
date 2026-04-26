@@ -157,7 +157,9 @@ class TestComplexMultiUserSimulation(unittest.TestCase):
         
         # Verify bet amounts
         self.assertEqual(p1.current_bet_amount, Decimal("175"))
-        self.assertEqual(p2.current_bet_amount, Decimal("75"))
+        # User2: bet 100, out with 80 (20 remaining), rebuy 75 = 20 + 75 = 95
+        self.assertEqual(p2.current_bet_amount, Decimal("95"))
+        # User3: bet 100, out with 90 (10 remaining), rebuy 60 = 10 + 60 = 70, out with 70 (0 remaining), rebuy 50 = 0 + 50 = 50
         self.assertEqual(p3.current_bet_amount, Decimal("50"))
 
     def test_transaction_verification_complex_scenario(self):
@@ -252,18 +254,28 @@ class TestComplexMultiUserSimulation(unittest.TestCase):
         status = self.event_service.get_status(self.event_id)
         self.assertEqual(len(status["participants"]), 0)
         self.assertEqual(status["state"], EventState.IDLE)
-        
+
         # Add bets again and test reset
         for user_key in ["user1", "user2", "user3"]:
             user = self.users[user_key]
             self.event_service.place_bet(self.event_id, user["id"], user["name"], Decimal("30"))
-        
+
         success, msg = self.event_service.reset_event(self.event_id)
         self.assertTrue(success)
-        
+
         status = self.event_service.get_status(self.event_id)
-        self.assertEqual(len(status["participants"]), 0)
+        # Participants should still exist but be reset (3 users who bet after undo)
+        self.assertEqual(len(status["participants"]), 3)
         self.assertEqual(status["state"], EventState.IDLE)
+
+        # Verify all participants are reset
+        participants = self.storage.get_all_participants(self.event_id)
+        for p in participants:
+            self.assertEqual(p.state, "NOT_JOINED")
+            self.assertEqual(p.total_bet_amount, Decimal("0"))
+            self.assertEqual(p.current_bet_amount, Decimal("0"))
+            self.assertEqual(p.prize_amount, Decimal("0"))
+            self.assertEqual(p.rebuy_count, 0)
 
 
 if __name__ == "__main__":

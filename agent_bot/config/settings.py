@@ -71,6 +71,13 @@ VERSION = _yaml_config.get('version', '1.0.0')
 PERSONALITY_ENABLED = _bot_config.get('personality', {}).get('enabled', True)
 PERSONALITY_SASSY_LEVEL = _bot_config.get('personality', {}).get('sassy_level', 'medium')
 PERSONALITY_USE_LLM = _bot_config.get('personality', {}).get('use_llm', True)
+BIG_POT_PERCENT = _bot_config.get('personality', {}).get('big_pot_percent', 0.8)
+PERSONALITY_LLM_MODEL = _bot_config.get('personality', {}).get('llm_model', OLLAMA_MODEL)
+PERSONALITY_LLM_TIMEOUT_SECONDS = _bot_config.get('personality', {}).get('llm_timeout_seconds', 15)
+PERSONALITY_LLM_TEMPERATURE = _bot_config.get('personality', {}).get('llm_temperature', 0.8)
+PERSONALITY_LLM_TOP_P = _bot_config.get('personality', {}).get('llm_top_p', 0.95)
+PERSONALITY_LLM_NUM_PREDICT = _bot_config.get('personality', {}).get('llm_num_predict', 80)
+PERSONALITY_LLM_NUM_CTX = _bot_config.get('personality', {}).get('llm_num_ctx', 2048)
 
 # Inactivity configuration
 INACTIVITY_ENABLED = _bot_config.get('inactivity', {}).get('enabled', True)

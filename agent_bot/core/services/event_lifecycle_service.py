@@ -103,14 +103,14 @@ class EventLifecycleService:
             return False, error_msg
 
     def reset_event(self, event_id: int) -> tuple[bool, str]:
-        """Reset an event (delete all participants)."""
+        """Reset an event (clear all participant data)."""
         try:
             event = self.storage.get_event(event_id)
             if not event:
                 return False, "Event not found"
 
-            # Delete all participants
-            self.storage.delete_all_participants(event_id)
+            # Reset all participants (clear debts/winnings, reset state)
+            self.storage.reset_all_participants(event_id)
 
             # Reset event state to IDLE
             self.storage.update_event_state(event_id, EventState.IDLE)

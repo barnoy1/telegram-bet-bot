@@ -1,7 +1,7 @@
 """Service for handling participant operations (going out, etc.)."""
 
 from decimal import Decimal
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 import logging
 
 from agent_bot.db.storage import BettingStorage
@@ -24,18 +24,20 @@ class ParticipantService:
         self,
         storage: BettingStorage,
         taunt_service: TauntService = None,
+        llm_service = None,
         error_handler: Callable[[str], None] = None,
         event_machine_getter: Callable[[int], EventStateMachine] = None,
         participant_machine_getter: Callable[[int, int], ParticipantStateMachine] = None
     ):
         self.storage = storage
         self.taunt_service = taunt_service or TauntService()
+        self.llm_service = llm_service
         self.error_handler = error_handler or (lambda msg: logger.error(msg))
-        self._get_event_machine = event_machine_getter
-        self._get_participant_machine = participant_machine_getter
+        self._event_machine_getter = event_machine_getter
+        self._participant_machine_getter = participant_machine_getter
         self._participant_machines = {}
 
-    def _get_participant_machine(self, event_id: int, user_id: int) -> ParticipantStateMachine:
+    def _get_or_create_participant_machine(self, event_id: int, user_id: int) -> ParticipantStateMachine:
         """Get or create participant state machine."""
         if self._participant_machine_getter:
             return self._participant_machine_getter(event_id, user_id)
@@ -64,10 +66,6 @@ class ParticipantService:
             if not event:
                 return False, "Event not found"
 
-            # Check if event is closed
-            if event.state.name == "CLOSED":
-                return False, "Event is closed"
-
             # Get participant
             participant = self.storage.get_participant(event_id, user_id)
             if not participant:
@@ -82,7 +80,7 @@ class ParticipantService:
                 return False, f"Amount exceeds current pot (${current_pot:.2f})"
 
             # Get event machine
-            event_machine = self._get_event_machine(event_id) if self._get_event_machine else None
+            event_machine = self._event_machine_getter(event_id) if self._event_machine_getter else None
 
             # Validate event state accepts OUT
             if event_machine:
@@ -91,7 +89,7 @@ class ParticipantService:
                     return False, f"Cannot go OUT in {event_machine.state_name} state"
 
             # Get participant machine
-            participant_machine = self._get_participant_machine(event_id, user_id)
+            participant_machine = self._get_or_create_participant_machine(event_id, user_id)
 
             # Validate participant state accepts OUT
             out_event = StateEvent('OUT', {'user_id': user_id, 'amount': prize_amount})
@@ -104,8 +102,8 @@ class ParticipantService:
             # Calculate balance for taunt
             balance = prize_amount - participant.total_bet_amount
 
-            # Generate taunting message
-            taunt = self.taunt_service.generate_out_taunt(username, balance, prize_amount)
+            # Generate taunting message (fallback for when LLM is not available)
+            taunt = self.taunt_service.generate_out_taunt(username, float(balance), float(prize_amount))
 
             # Transition participant state machine
             participant_machine.transition(out_event)
@@ -114,10 +112,13 @@ class ParticipantService:
             if event_machine:
                 event_machine.transition(out_event)
 
-            # Check if event should close (no IN_GAME participants)
+            # Check if event should transition to IDLE (no IN_GAME participants)
             if event_machine:
-                close_event = StateEvent('CLOSE', {})
-                event_machine.transition(close_event)
+                in_game_count = self.storage.get_in_game_participant_count(event_id)
+                if in_game_count == 0:
+                    # Transition to IDLE instead of CLOSED to allow new bets
+                    reset_event = StateEvent('RESET', {})
+                    event_machine.transition(reset_event)
 
             # Update activity
             self.storage.update_event_activity(event_id)

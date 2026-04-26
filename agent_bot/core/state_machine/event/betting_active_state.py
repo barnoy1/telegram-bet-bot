@@ -29,16 +29,23 @@ class BettingActiveState(State):
     def handle(self, event: Event) -> Optional[State]:
         """Handle event and return next state."""
         event_type = event.event_type
-        
+
+        if event_type == 'RESET':
+            # Check if no IN_GAME participants remain - transition to IDLE
+            in_game_count = self.storage.get_in_game_participant_count(self.event_id)
+            if in_game_count == 0:
+                from agent_bot.core.state_machine.event.idle_state import IdleState
+                return IdleState(self.context)
+
         if event_type == 'CLOSE':
             # Check if no IN_GAME participants remain
             in_game_count = self.storage.get_in_game_participant_count(self.event_id)
             if in_game_count == 0:
                 from agent_bot.core.state_machine.event.closed_state import ClosedState
                 return ClosedState(self.context)
-        
+
         # Other events don't change state
-        
+
         return None
 
     def on_entry(self, event: Event):

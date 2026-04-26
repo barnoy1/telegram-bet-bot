@@ -156,6 +156,12 @@ class BettingStorage:
             repo = ParticipantRepository(session)
             return repo.delete_all_participants(event_id)
 
+    def reset_all_participants(self, event_id: int) -> bool:
+        """Reset all participants for an event (clear debts/winnings, reset state)."""
+        with self._get_session() as session:
+            repo = ParticipantRepository(session)
+            return repo.reset_all_participants(event_id)
+
     # Transaction operations
     def save_transactions(self, event_id: int, transactions: List[Dict]) -> bool:
         """Save settlement transactions."""
@@ -183,6 +189,52 @@ class BettingStorage:
         with self._get_session() as session:
             repo = ParticipantRepository(session)
             return repo.get_in_game_participant_count(event_id)
+
+    def get_event_status_optimized(self, event_id: int) -> Optional[Dict]:
+        """Get event status in a single optimized query."""
+        with self._get_session() as session:
+            from agent_bot.db.models import EventModel, ParticipantModel, ParticipantState
+            from sqlalchemy.orm import joinedload
+            
+            # Get event with all participants in one query
+            event = session.query(EventModel).options(
+                joinedload(EventModel.creator)
+            ).filter(
+                EventModel.event_id == event_id
+            ).first()
+            
+            if not event:
+                return None
+            
+            # Get all participants for this event
+            participants = session.query(ParticipantModel).filter(
+                ParticipantModel.event_id == event_id
+            ).all()
+            
+            # Calculate pot and counts in Python (faster than additional SQL for small datasets)
+            # Pot includes bets from IN_GAME players + remaining bets from OUT players
+            current_pot = sum(p.current_bet_amount for p in participants if p.state == ParticipantState.IN_GAME) + sum(p.current_bet_amount for p in participants if p.state == ParticipantState.OUT)
+            in_game_count = sum(1 for p in participants if p.state == ParticipantState.IN_GAME)
+            out_count = sum(1 for p in participants if p.state == ParticipantState.OUT)
+            total_bets = sum(p.current_bet_amount for p in participants)
+            
+            # Convert to dataclass format (minimal conversion)
+            from agent_bot.db.models import Event, Participant
+            from agent_bot.db.repositories.base_repository import BaseRepository
+            
+            base_repo = BaseRepository(session)
+            event_data = base_repo._model_to_dataclass(event, Event)
+            participants_data = [base_repo._model_to_dataclass(p, Participant) for p in participants]
+            
+            return {
+                "event": event_data,
+                "state": event.state,
+                "participants": participants_data,
+                "in_game_count": in_game_count,
+                "out_count": out_count,
+                "current_pot": current_pot,
+                "total_bets": total_bets
+            }
 
     # Language tracking operations
     def increment_language(self, group_id: int, language_code: str) -> bool:

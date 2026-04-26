@@ -32,11 +32,13 @@ class StatusFormatter:
             output += f"👥 {players_label}:\n"
             for p in active_participants:
                 status_emoji = "🎴" if p.state == "IN_GAME" else "🚪"
-                # For OUT state, show prize amount (what they took out), otherwise show current_bet
+                # For OUT state, show prize amount (what they took out)
+                # For IN_GAME state, show prize amount if they have winnings, otherwise show current_bet
                 if p.state.value == "OUT":
                     balance = p.prize_amount
                 else:
-                    balance = p.current_bet_amount
+                    # Show prize amount if > 0 (player has winnings), otherwise show current bet
+                    balance = p.prize_amount if p.prize_amount > 0 else p.current_bet_amount
                 output += f"{status_emoji} {p.username} - ${balance:.2f} ({p.state.value})\n"
         else:
             output += f"📭 {no_players}\n"

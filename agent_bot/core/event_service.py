@@ -15,6 +15,7 @@ from agent_bot.core.services import (
     ParticipantService,
     TauntService
 )
+from agent_bot.core.services.betting_service import BetResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +23,15 @@ logger = logging.getLogger(__name__)
 class EventService:
     """Facade service coordinating all business logic services."""
 
-    def __init__(self, storage: BettingStorage, error_handler: Callable[[str], None] = None):
+    def __init__(self, storage: BettingStorage, error_handler: Callable[[str], None] = None, llm_service=None):
         self.storage = storage
         self.error_handler = error_handler or (lambda msg: logger.error(msg))
-        
+        self.llm_service = llm_service  # Optional LLM service for generating responses
+
         # Cache for state machines
         self._event_machines: Dict[int, EventStateMachine] = {}
         self._participant_machines: Dict[str, ParticipantStateMachine] = {}
-        
+
         # Initialize sub-services
         self.taunt_service = TauntService()
         self.event_lifecycle = EventLifecycleService(
@@ -47,6 +49,7 @@ class EventService:
         self.participant_service = ParticipantService(
             storage,
             self.taunt_service,
+            llm_service,
             error_handler,
             self._get_event_machine,
             self._get_participant_machine
@@ -105,7 +108,7 @@ class EventService:
         return self.event_lifecycle.undo_last_bet(event_id)
 
     # Delegate to BettingService
-    def place_bet(self, event_id: int, user_id: int, username: str, amount: Decimal) -> Tuple[bool, str, bool, bool]:
+    def place_bet(self, event_id: int, user_id: int, username: str, amount: Decimal) -> BetResult:
         """Place a bet for a user in an event."""
         return self.betting_service.place_bet(event_id, user_id, username, amount)
 
@@ -116,27 +119,9 @@ class EventService:
 
     # Status and settlement methods
     def get_status(self, event_id: int) -> Optional[Dict]:
-        """Get event status summary."""
+        """Get event status summary (optimized single-query version)."""
         try:
-            event = self.storage.get_event(event_id)
-            if not event:
-                return None
-            
-            participants = self.storage.get_all_participants(event_id)
-            current_pot = self.storage.get_current_pot(event_id)
-            
-            in_game = [p for p in participants if p.state == ParticipantState.IN_GAME]
-            out_players = [p for p in participants if p.state == ParticipantState.OUT]
-            
-            return {
-                "event": event,
-                "state": event.state,
-                "participants": participants,
-                "in_game_count": len(in_game),
-                "out_count": len(out_players),
-                "current_pot": current_pot,
-                "total_bets": sum(p.current_bet_amount for p in participants)
-            }
+            return self.storage.get_event_status_optimized(event_id)
         except Exception as e:
             self.error_handler(f"Failed to get status: {e}")
             return None

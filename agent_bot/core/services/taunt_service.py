@@ -18,13 +18,13 @@ class TauntService:
     def _load_taunts_from_persona(self) -> Dict[str, Dict[str, List[str]]]:
         """Load exit taunts from persona.md file organized by balance type and mood protocol."""
         taunts = {
-            "positive": {"fake_friendly": [], "aggressive": [], "superstitious": []},
-            "negative": {"fake_friendly": [], "aggressive": [], "superstitious": []},
-            "break_even": {"fake_friendly": [], "aggressive": [], "superstitious": []}
+            "positive": {"sadistic_mockery": [], "aggressive_instigator": []},
+            "negative": {"sadistic_mockery": [], "aggressive_instigator": []},
+            "break_even": {"sadistic_mockery": [], "aggressive_instigator": []}
         }
 
         try:
-            persona_path = Path(__file__).parent.parent.parent / "persona.md"
+            persona_path = Path(__file__).parent.parent.parent / "persona" / "persona.md"
             if not persona_path.exists():
                 logger.warning(f"Persona file not found at {persona_path}, using default taunts")
                 return self._get_default_taunts()
@@ -56,20 +56,15 @@ class TauntService:
 
     def _parse_mood_taunts(self, section_text: str, taunt_dict: Dict[str, List[str]]):
         """Parse taunts from a section, organizing by mood."""
-        # Fake Friendly
-        fake_friendly = re.search(r'\*\*Fake Friendly.*?\*\*(.*?)(?=\*\*Aggressive|\*\*Superstitious|\Z)', section_text, re.DOTALL)
-        if fake_friendly:
-            taunt_dict["fake_friendly"] = self._extract_taunts(fake_friendly.group(1))
+        # Sadistic Mockery
+        sadistic = re.search(r'Sadistic Mockery.*?\n(.*?)(?=Aggressive Instigator|\Z)', section_text, re.DOTALL)
+        if sadistic:
+            taunt_dict["sadistic_mockery"] = self._extract_taunts(sadistic.group(1))
 
-        # Aggressive
-        aggressive = re.search(r'\*\*Aggressive.*?\*\*(.*?)(?=\*\*Superstitious|\Z)', section_text, re.DOTALL)
+        # Aggressive Instigator
+        aggressive = re.search(r'Aggressive Instigator.*?\n(.*?)$', section_text, re.DOTALL)
         if aggressive:
-            taunt_dict["aggressive"] = self._extract_taunts(aggressive.group(1))
-
-        # Superstitious
-        superstitious = re.search(r'\*\*Superstitious.*?\*\*(.*?)$', section_text, re.DOTALL)
-        if superstitious:
-            taunt_dict["superstitious"] = self._extract_taunts(superstitious.group(1))
+            taunt_dict["aggressive_instigator"] = self._extract_taunts(aggressive.group(1))
 
     def _extract_taunts(self, text: str) -> List[str]:
         """Extract individual taunts from text."""
@@ -86,19 +81,16 @@ class TauntService:
         """Get default taunts when persona file is not available."""
         return {
             "positive": {
-                "fake_friendly": ["Nice win, {username}!"],
-                "aggressive": ["Took the money and ran, {username}?"],
-                "superstitious": ["You broke the luck, {username}!"]
+                "sadistic_mockery": ["Look at {username} running away with ${balance:.2f} like a scared little bitch. Taking the money and crying all the way home. Your wife must be so proud of your cowardice. 💵"],
+                "aggressive_instigator": ["What is this, {username}? Grabbing ${balance:.2f} and running like a little girl? Make a real move or get the hell out of my sight! 🃏"]
             },
             "negative": {
-                "fake_friendly": ["Better luck next time, {username}!"],
-                "aggressive": ["Tough break, {username}!"],
-                "superstitious": ["Bad energy, {username}!"]
+                "sadistic_mockery": ["Hey {username}! Down ${abs_balance:.2f}? Beautiful. I love watching you suffer. Your kids are gonna love the ramen dinners this month. Thanks for the donation, loser! 💸"],
+                "aggressive_instigator": ["What is this, {username}? Down ${abs_balance:.2f} and running like a coward? This is a poker table or a daycare center? Pathetic! 😤"]
             },
             "break_even": {
-                "fake_friendly": ["Safe and sound, {username}!"],
-                "aggressive": ["Boring, {username}!"],
-                "superstitious": ["Neutral energy, {username}!"]
+                "sadistic_mockery": ["Hey {username}! Breaking even with ${prize_amount:.2f}? How boring. You're too scared to win and too scared to lose. Pathetic. 😊"],
+                "aggressive_instigator": ["What is this, {username}? Breaking even with ${prize_amount:.2f}? This is a poker game or a knitting circle? Where's the balls? 🃏"]
             }
         }
 
@@ -112,21 +104,25 @@ class TauntService:
         else:
             balance_category = "break_even"
 
-        # Determine mood based on balance magnitude
-        abs_balance = abs(balance)
-        if abs_balance < 50:
-            mood = "fake_friendly"  # 50%
-        elif abs_balance < 150:
-            mood = "aggressive"  # 30%
-        else:
-            mood = "superstitious"  # 20%
+        # Randomly select mood (50% each for sadistic_mockery and aggressive_instigator)
+        mood = random.choice(["sadistic_mockery", "aggressive_instigator"])
 
         # Get taunts for this balance category and mood
         taunt_templates = self._taunts[balance_category][mood]
 
+        # If no taunts loaded, fallback to default
+        if not taunt_templates:
+            logger.warning(f"No taunts found for {balance_category}/{mood}, using default")
+            return self._get_default_taunts()[balance_category][mood][0].format(
+                username=username,
+                balance=balance if balance_category == "positive" else None,
+                abs_balance=abs(balance) if balance_category == "negative" else None,
+                prize_amount=prize_amount if balance_category == "break_even" else None
+            )
+
         # Select random taunt and format it
         template = random.choice(taunt_templates)
-        
+
         format_kwargs = {"username": username}
         if balance_category == "positive":
             format_kwargs["balance"] = balance

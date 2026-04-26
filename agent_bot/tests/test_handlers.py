@@ -8,6 +8,7 @@ from agent_bot.db.storage import BettingStorage
 from agent_bot.core.event_service import EventService
 from agent_bot.db.models import EventState, ParticipantState
 from agent_bot.core.settlement.hungarian_settlement import HungarianSettlementService
+from agent_bot.tests.mock_llm_service import MockLLMPersonalityService
 from dotenv import load_dotenv
 
 # Import enum values for cleaner code
@@ -25,7 +26,8 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         # Force SQLite for testing (override any DATABASE_URL from .env)
         self.db_url = "sqlite:///test_events_multi.db"  # Unique DB file for this test class
         self.storage = BettingStorage(self.db_url)
-        self.event_service = EventService(self.storage)
+        self.mock_llm = MockLLMPersonalityService()
+        self.event_service = EventService(self.storage, llm_service=self.mock_llm)
         # Generate unique event ID for each test to avoid conflicts
         import random
         self.event_id = -1000000000 - random.randint(1, 999999)
@@ -54,10 +56,10 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.assertEqual(event.state, EventState.IDLE)
 
         # Place bet - should transition to BETTING_ACTIVE
-        success, msg, is_rebuy, is_adding = self.event_service.place_bet(self.event_id, user_id, username, Decimal("100"))
-        self.assertTrue(success)
-        self.assertFalse(is_rebuy)
-        self.assertFalse(is_adding)
+        result = self.event_service.place_bet(self.event_id, user_id, username, Decimal("100"))
+        self.assertTrue(result.success)
+        self.assertFalse(result.is_rebuy)
+        self.assertFalse(result.is_adding)
         
         event = self.storage.get_event(self.event_id)
         self.assertEqual(event.state, EventState.BETTING_ACTIVE)
@@ -74,9 +76,9 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.assertEqual(participant.state, OUT)
         self.assertEqual(participant.prize_amount, Decimal("50"))
 
-        # Event should close (no IN_GAME participants)
+        # Event should transition to IDLE (no IN_GAME participants)
         event = self.storage.get_event(self.event_id)
-        self.assertEqual(event.state, EventState.CLOSED)
+        self.assertEqual(event.state, EventState.IDLE)
 
     def test_multiple_participants_betting_flow(self):
         """Test multiple participants placing bets in sequence."""
@@ -98,24 +100,76 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.assertEqual(status["in_game_count"], 3)
 
     def test_rebuy_scenario(self):
-        """Test rebuy: user goes out, then bets again."""
+        """Test rebuy: user goes out, then bets again with less than prize amount."""
         user1_id = 6183561523
         user2_id = 1234567890
 
         self.event_service.start_event(self.event_id, "Test Group", user1_id, "Ron")
         self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("100"))
         self.event_service.place_bet(self.event_id, user2_id, "Alice", Decimal("75"))
-        self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("50"))
+        success, msg = self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("50"))
 
-        # Rebuy (event is still open because Alice is still IN_GAME)
-        success, msg, is_rebuy, is_adding = self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("25"))
-        self.assertTrue(success)
-        self.assertTrue(is_rebuy)
-        self.assertFalse(is_adding)
+        # Verify taunting message for out action
+        self.assertIn("Ron", msg)
+
+        # After out: Ron has 50 remaining in pot (100 - 50 = 50)
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        self.assertEqual(participant.current_bet_amount, Decimal("50"))
+
+        # Rebuy with less than prize amount (50 prize, 25 rebuy)
+        result = self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("25"))
+        self.assertTrue(result.success)
+        self.assertTrue(result.is_rebuy)
+        self.assertFalse(result.is_adding)
 
         participant = self.storage.get_participant(self.event_id, user1_id)
         self.assertEqual(participant.state, IN_GAME)
         self.assertEqual(participant.rebuy_count, 1)
+        # current_bet_amount should be 50 (remaining) + 25 (new) = 75
+        self.assertEqual(participant.current_bet_amount, Decimal("75"))
+        # Prize amount should be reduced by rebuy amount (50 - 25 = 25 remaining)
+        self.assertEqual(participant.prize_amount, Decimal("25"))
+
+        # Verify status display shows prize amount for IN_GAME player with winnings
+        status = self.event_service.get_status(self.event_id)
+        # Check that the participant in status has prize_amount
+        ron_status = next((p for p in status["participants"] if p.username == "Ron"), None)
+        self.assertIsNotNone(ron_status)
+        self.assertEqual(ron_status.prize_amount, Decimal("25"))
+
+    def test_rebuy_with_more_than_prize(self):
+        """Test rebuy with more than prize amount."""
+        user1_id = 6183561523
+        user2_id = 1234567890
+
+        self.event_service.start_event(self.event_id, "Test Group", user1_id, "Ron")
+        self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("100"))
+        self.event_service.place_bet(self.event_id, user2_id, "Alice", Decimal("75"))
+        success, msg = self.event_service.user_out(self.event_id, user1_id, "Ron", Decimal("20"))
+
+        # After out: Ron has 80 remaining in pot (100 - 20 = 80)
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        self.assertEqual(participant.current_bet_amount, Decimal("80"))
+
+        # Rebuy with more than prize amount (20 prize, 30 rebuy)
+        result = self.event_service.place_bet(self.event_id, user1_id, "Ron", Decimal("30"))
+        self.assertTrue(result.success)
+        self.assertTrue(result.is_rebuy)
+        self.assertFalse(result.is_adding)
+
+        participant = self.storage.get_participant(self.event_id, user1_id)
+        self.assertEqual(participant.state, IN_GAME)
+        self.assertEqual(participant.rebuy_count, 1)
+        # current_bet_amount should be 80 (remaining) + 30 (new) = 110
+        self.assertEqual(participant.current_bet_amount, Decimal("110"))
+        # Prize amount should be 0 (all used)
+        self.assertEqual(participant.prize_amount, Decimal("0"))
+
+        # Verify status shows prize_amount is 0 for IN_GAME player with no winnings
+        status = self.event_service.get_status(self.event_id)
+        ron_status = next((p for p in status["participants"] if p.username == "Ron"), None)
+        self.assertIsNotNone(ron_status)
+        self.assertEqual(ron_status.prize_amount, Decimal("0"))
 
     def test_adding_to_existing_bet(self):
         """Test adding to existing bet (not rebuy)."""
@@ -126,10 +180,10 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.event_service.place_bet(self.event_id, user_id, username, Decimal("100"))
 
         # Add to bet
-        success, msg, is_rebuy, is_adding = self.event_service.place_bet(self.event_id, user_id, username, Decimal("25"))
-        self.assertTrue(success)
-        self.assertFalse(is_rebuy)
-        self.assertTrue(is_adding)
+        result = self.event_service.place_bet(self.event_id, user_id, username, Decimal("25"))
+        self.assertTrue(result.success)
+        self.assertFalse(result.is_rebuy)
+        self.assertTrue(result.is_adding)
 
         participant = self.storage.get_participant(self.event_id, user_id)
         self.assertEqual(participant.current_bet_amount, Decimal("125"))
@@ -158,7 +212,7 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.assertEqual(len(transactions), 0)
 
     def test_closed_event_prevents_bets(self):
-        """Test that closed events prevent new bets."""
+        """Test that IDLE events allow new bets (after last player goes OUT)."""
         user_id = 6183561523
         username = "Ron"
 
@@ -166,14 +220,13 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         self.event_service.place_bet(self.event_id, user_id, username, Decimal("100"))
         self.event_service.user_out(self.event_id, user_id, username, Decimal("100"))
 
-        # Event should be closed
+        # Event should be IDLE (transitioned from BETTING_ACTIVE when last player went OUT)
         event = self.storage.get_event(self.event_id)
-        self.assertEqual(event.state, EventState.CLOSED)
+        self.assertEqual(event.state, EventState.IDLE)
 
-        # Try to bet again - should fail
-        success, msg, _, _ = self.event_service.place_bet(self.event_id, user_id, username, Decimal("50"))
-        self.assertFalse(success)
-        self.assertIn("closed", msg.lower())
+        # Try to bet again - should succeed (IDLE allows bets)
+        result = self.event_service.place_bet(self.event_id, user_id, username, Decimal("50"))
+        self.assertTrue(result.success)
 
     def test_undo_last_bet(self):
         """Test undoing last bet."""
@@ -192,7 +245,7 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
             self.assertEqual(len(participants), 1)
 
     def test_reset_event(self):
-        """Test resetting all bets."""
+        """Test resetting all participant data."""
         user1_id = 6183561523
         user2_id = 1234567890
 
@@ -208,8 +261,17 @@ class TestEventServiceMultiParticipantFlows(unittest.TestCase):
         event = self.storage.get_event(self.event_id)
         self.assertEqual(event.state, EventState.IDLE)
 
+        # Participants should still exist but be reset
         participants = self.storage.get_all_participants(self.event_id)
-        self.assertEqual(len(participants), 0)
+        self.assertEqual(len(participants), 2)  # Participants not deleted, just reset
+
+        # Verify all participants are reset
+        for p in participants:
+            self.assertEqual(p.state, "NOT_JOINED")
+            self.assertEqual(p.total_bet_amount, Decimal("0"))
+            self.assertEqual(p.current_bet_amount, Decimal("0"))
+            self.assertEqual(p.prize_amount, Decimal("0"))
+            self.assertEqual(p.rebuy_count, 0)
 
 
 class TestHungarianSettlementAlgorithm(unittest.TestCase):
@@ -414,7 +476,9 @@ class TestComplexMultiUserSimulation(unittest.TestCase):
         
         # Verify bet amounts
         self.assertEqual(p1.current_bet_amount, Decimal("175"))
-        self.assertEqual(p2.current_bet_amount, Decimal("75"))
+        # User2: bet 100, out with 80 (20 remaining), rebuy 75 = 20 + 75 = 95
+        self.assertEqual(p2.current_bet_amount, Decimal("95"))
+        # User3: bet 100, out with 90 (10 remaining), rebuy 60 = 10 + 60 = 70, out with 70 (0 remaining), rebuy 50 = 0 + 50 = 50
         self.assertEqual(p3.current_bet_amount, Decimal("50"))
 
     def test_transaction_verification_complex_scenario(self):
@@ -512,13 +576,23 @@ class TestComplexMultiUserSimulation(unittest.TestCase):
         for user_key in ["user1", "user2", "user3"]:
             user = self.users[user_key]
             self.event_service.place_bet(self.event_id, user["id"], user["name"], Decimal("30"))
-        
+
         success, msg = self.event_service.reset_event(self.event_id)
         self.assertTrue(success)
-        
+
         status = self.event_service.get_status(self.event_id)
-        self.assertEqual(len(status["participants"]), 0)
+        # Participants should still exist but be reset (3 users who bet after undo)
+        self.assertEqual(len(status["participants"]), 3)
         self.assertEqual(status["state"], EventState.IDLE)
+
+        # Verify all participants are reset
+        participants = self.storage.get_all_participants(self.event_id)
+        for p in participants:
+            self.assertEqual(p.state, "NOT_JOINED")
+            self.assertEqual(p.total_bet_amount, Decimal("0"))
+            self.assertEqual(p.current_bet_amount, Decimal("0"))
+            self.assertEqual(p.prize_amount, Decimal("0"))
+            self.assertEqual(p.rebuy_count, 0)
 
 
 if __name__ == "__main__":

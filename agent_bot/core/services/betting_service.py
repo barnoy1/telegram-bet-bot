@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 from typing import Callable, Tuple
+from dataclasses import dataclass
 import logging
 
 from agent_bot.db.storage import BettingStorage
@@ -12,6 +13,18 @@ from agent_bot.core.state_machine.base import Event as StateEvent
 
 # Import enum values for cleaner code
 NOT_JOINED, IN_GAME, OUT = ParticipantState
+
+
+@dataclass
+class BetResult:
+    """Result of a bet placement operation."""
+    success: bool
+    message: str
+    is_rebuy: bool
+    is_adding: bool
+    is_first_time: bool
+    prize_amount_before: Decimal = Decimal("0")  # Prize amount before bet
+    prize_amount_after: Decimal = Decimal("0")   # Prize amount after bet
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +62,24 @@ class BettingService:
             )
         return self._participant_machines[cache_key]
 
-    def place_bet(self, event_id: int, user_id: int, username: str, amount: Decimal) -> Tuple[bool, str, bool, bool]:
+    def place_bet(self, event_id: int, user_id: int, username: str, amount: Decimal) -> BetResult:
         """Place a bet for a user in an event."""
         try:
             # Validate amount
             if amount <= 0:
-                return False, "Amount must be positive", False, False
+                return BetResult(False, "Amount must be positive", False, False, False)
+
+            # Get or create user (ensures username is up to date)
+            self.storage.get_or_create_user(user_id, username)
 
             # Get event
             event = self.storage.get_event(event_id)
             if not event:
-                return False, "Event not found", False, False
+                return BetResult(False, "Event not found", False, False, False)
 
             # Check if event is closed
             if event.state.name == "CLOSED":
-                return False, "Event is closed", False, False
+                return BetResult(False, "Event is closed", False, False, False)
 
             # Get participant
             participant = self.storage.get_participant(event_id, user_id)
@@ -75,7 +91,7 @@ class BettingService:
             if event_machine:
                 bet_event = StateEvent('BET', {'user_id': user_id, 'amount': amount})
                 if not event_machine.current_state.validate(bet_event):
-                    return False, f"Cannot bet in {event_machine.state_name} state", False, False
+                    return BetResult(False, f"Cannot bet in {event_machine.state_name} state", False, False, False)
 
             # Get participant machine
             participant_machine = self._get_participant_machine(event_id, user_id)
@@ -83,12 +99,14 @@ class BettingService:
             # Validate participant state accepts BET
             bet_event = StateEvent('BET', {'user_id': user_id, 'amount': amount})
             if not participant_machine.current_state.validate(bet_event):
-                return False, f"Cannot bet in participant {participant_machine.state_name} state", False, False
+                return BetResult(False, f"Cannot bet in participant {participant_machine.state_name} state", False, False, False)
 
             # Store previous state for rebuy/adding detection
             previous_state = participant_machine.current_state
 
             # Handle bet placement
+            is_first_time = participant is None
+            prize_before = participant.prize_amount if participant else Decimal("0")
             if participant is None:
                 # New participant
                 self.storage.create_participant(event_id, user_id, amount)
@@ -102,6 +120,10 @@ class BettingService:
                 else:
                     # Adding to existing bet
                     self.storage.update_participant_bet(event_id, user_id, amount)
+
+            # Get updated participant to check prize after
+            participant_after = self.storage.get_participant(event_id, user_id)
+            prize_after = participant_after.prize_amount if participant_after else Decimal("0")
 
             # Transition participant state machine
             participant_machine.transition(bet_event)
@@ -118,9 +140,9 @@ class BettingService:
             self.storage.update_event_activity(event_id)
 
             logger.info(f"Bet placed: {username} ${amount:.2f} in event {event_id}")
-            return True, f"Bet placed: ${amount:.2f}", is_rebuy, is_adding
+            return BetResult(True, f"Bet placed: ${amount:.2f}", is_rebuy, is_adding, is_first_time, prize_before, prize_after)
 
         except Exception as e:
             error_msg = f"Failed to place bet: {e}"
             self.error_handler(error_msg)
-            return False, error_msg, False, False
+            return BetResult(False, error_msg, False, False, False, Decimal("0"), Decimal("0"))
